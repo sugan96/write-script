@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createProject, nameError, projectError } from "./project";
 import { listRecent, removeRecent, touchRecent, type Recent } from "./recent";
+import { ProjectScreen } from "../project/screen";
 
 type Status = "ready" | "needs-access" | "missing";
 type Row = Recent & { status: Status; opened: string };
@@ -52,7 +53,7 @@ export function Home() {
   const supported = useSupported();
   if (supported === null) return null;
   return (
-    <div className="min-h-screen bg-[#FAFAF9] text-zinc-900">
+    <div className="flex min-h-screen flex-col bg-[#FAFAF9] text-zinc-900">
       <Header />
       {supported ? <Projects /> : <Unsupported />}
     </div>
@@ -121,16 +122,7 @@ function Projects() {
     await load();
   };
 
-  // ponytail: placeholder until the project screen exists (build step 3).
-  if (opened) {
-    return (
-      <main className="mx-auto flex max-w-[1120px] flex-col items-start gap-4 px-8 py-14">
-        <h1 className={`${SCRIPT_FONT} text-3xl font-bold`}>{opened.name}</h1>
-        <p className="text-zinc-600">Project opened. The project screen comes next.</p>
-        <Button variant="outline" onClick={() => { setOpened(null); void load(); }}>Back to projects</Button>
-      </main>
-    );
-  }
+  if (opened) return <ProjectScreen dir={opened} onClose={() => { setOpened(null); void load(); }} />;
 
   if (rows === null) return null;
 
