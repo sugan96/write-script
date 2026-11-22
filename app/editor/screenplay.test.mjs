@@ -1,7 +1,21 @@
 // Run: node --test app/editor/screenplay.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, WIDTH, classify, paginate, wrap } from "./screenplay.ts";
+import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, PAPERS, WIDTH, classify, paginate, wrap } from "./screenplay.ts";
+
+test("A4 keeps the 60-character line and fills the page exactly", () => {
+  const g = PAPERS.a4;
+  const r = (n) => +n.toFixed(2);
+  assert.equal(g.lines, 58);
+  assert.equal(r(g.right), 55.28);
+  assert.equal(r(g.bottom), 73.89);
+  assert.equal(r(g.left + 60 * CHAR_PT + g.right), 595.28);
+  assert.equal(r(g.top + g.lines * LINE_PT + g.bottom), 841.89);
+});
+
+test("paginate reports the lines used on the last page", () => {
+  assert.equal(paginate(classify("INT. ROOM - DAY\n\nShe waits.\n")).used, 4);
+});
 
 test("classify", () => {
   const kinds = classify("INT. KITCHEN - NIGHT\n\nJohn eats.\n\nJOHN\n(quiet)\nHello.\n\nCUT TO:\n").map((l) => l.kind);
