@@ -57,4 +57,5 @@ The app is built with Next.js `output: 'export'` and served by Cloudflare Pages 
 - Why: the build fails on server features (Server Actions, cookies, request-based route handlers, dynamic routes without `generateStaticParams`), so a backend cannot be added by accident.
 - One page, no dynamic routes. The open project is client state; a folder handle has no meaningful URL.
 - Security headers (including the Content-Security-Policy needed once Google Drive OAuth arrives) go in Cloudflare's `_headers` file, because Next's `headers()` config does not work with static export.
-- `cacheComponents` and `partialPrefetching` in `next.config.ts` are checked against static export at build time and removed if they conflict.
+- `cacheComponents` and `partialPrefetching` are not used. `cacheComponents` turns on partial prerendering, and the build fails with "PPR cannot be enabled in export mode". Both only help server rendering.
+- No Content-Security-Policy yet. Next's static export uses inline scripts, so a CSP needs script hashes. It is added together with Google Drive OAuth.
