@@ -90,6 +90,15 @@ A writer often develops a character before writing them into a script. A **+** b
 - Removing all of a character's lines from the scripts never deletes the sheet.
 - Renaming a character (from the sheet or the script) updates the file and every script in the project, as described in decision 0001-2.
 
+How rename works:
+
+- It starts from the sheet's Name field. The rename runs when the writer presses Enter or leaves the field with a changed name. Escape puts the old name back. Rename from the script or the sidebar comes later.
+- The new name is trimmed and saved in capitals, because a character cue in Fountain is in capitals.
+- It is refused, with nothing written, when the name is empty, already belongs to another character (without regard to case), or its file name is taken by another file.
+- What is replaced, whole words only (`JOHNSON` is never touched): character cue lines, keeping `@`, extensions such as `(V.O.)` and `^`, and the name in capitals in action lines. Dialogue and lower-case mentions stay as written.
+- Order: save the open document first (a conflict stops the rename), read every script, write each changed script with the conflict check, write the sheet under its new file name, then delete the old file. If a write fails, the rename stops and the error names the scripts already changed; the undo bar can still put them back.
+- Undo: after a rename, a bar says "Renamed JOHN to JACK in N scripts" with an **Undo** button. The old texts are kept in memory until the bar is closed, another document is opened or another rename runs. Undo writes them back with the conflict check, skips a file that changed since (and says which), and renames the sheet back.
+
 ### 7. View and edit modes, sections as accordions
 
 Design: `docs/design/project/character-edit.html` and `character-view.html`.
