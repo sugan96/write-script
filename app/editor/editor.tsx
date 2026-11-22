@@ -96,13 +96,18 @@ const theme = EditorView.theme({
   ".fx-dialogue .pb-contd": { paddingLeft: `${22 - DIALOGUE_LEFT}ch` },
 });
 
-export default function Editor({ initial }: { initial: string }) {
+export default function Editor({ initial, onChange }: { initial: string; onChange?: (text: string) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState(0);
+  const change = useRef(onChange);
+  useEffect(() => {
+    change.current = onChange;
+  });
 
   useEffect(() => {
-    const report = (s: EditorState) => {
+    const report = (s: EditorState, edited = false) => {
       setPages(s.field(layoutField).pages);
+      if (edited) change.current?.(s.doc.toString());
     };
     const view = new EditorView({
       parent: host.current!,
@@ -114,7 +119,7 @@ export default function Editor({ initial }: { initial: string }) {
           EditorView.lineWrapping,
           layoutField,
           theme,
-          EditorView.updateListener.of((u) => u.docChanged && report(u.state)),
+          EditorView.updateListener.of((u) => u.docChanged && report(u.state, true)),
         ],
       }),
     });
