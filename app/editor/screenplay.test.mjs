@@ -1,7 +1,7 @@
 // Run: node --test app/editor/screenplay.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, PAPERS, WIDTH, classify, cueName, cuePrefix, paginate, speakers, wrap } from "./screenplay.ts";
+import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, PAPERS, WIDTH, classify, cueName, cuePrefix, paginate, renameCharacter, speakers, wrap } from "./screenplay.ts";
 
 test("A4 keeps the 60-character line and fills the page exactly", () => {
   const g = PAPERS.a4;
@@ -82,4 +82,44 @@ test("cuePrefix finds a cue being typed after a blank line", () => {
   assert.equal(cuePrefix("She", ""), null); // action, not capitals
   assert.equal(cuePrefix("JOHN (V", ""), null); // typing an extension
   assert.equal(cuePrefix("", ""), null); // nothing typed
+});
+
+test("renameCharacter changes cues and caps mentions in action, whole words only", () => {
+  const doc = [
+    "INT. JOHN'S FLAT - DAY", // scene heading: untouched
+    "",
+    "JOHN enters. JOHNSON follows. John waves.",
+    "",
+    "JOHN (V.O.)",
+    "John? JOHN!", // dialogue: untouched
+    "",
+    "@john ^",
+    "Hi.",
+    "",
+    "MARA",
+    "JOHN.", // dialogue: untouched
+    "",
+  ].join("\n");
+  const { text, changes } = renameCharacter(doc, "John", "JACK");
+  assert.equal(changes, 3);
+  assert.deepEqual(text.split("\n"), [
+    "INT. JOHN'S FLAT - DAY",
+    "",
+    "JACK enters. JOHNSON follows. John waves.",
+    "",
+    "JACK (V.O.)",
+    "John? JOHN!",
+    "",
+    "@JACK ^",
+    "Hi.",
+    "",
+    "MARA",
+    "JOHN.",
+    "",
+  ]);
+});
+
+test("renameCharacter leaves a script without the name unchanged", () => {
+  const doc = "MARA\nHello.\n";
+  assert.deepEqual(renameCharacter(doc, "JOHN", "JACK"), { text: doc, changes: 0 });
 });
