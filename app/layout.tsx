@@ -1,5 +1,9 @@
 import localFont from "next/font/local";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+// App UI font (docs/0005-ui-components.md). Downloaded at build time and served with the app.
+const inter = Inter({ subsets: ["latin"], variable: "--font-ui" });
 
 // Script font, bundled so every writer sees and prints the same font.
 // The editor reads it through the --font-script CSS variable.
@@ -15,8 +19,8 @@ const courierPrime = localFont({
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={courierPrime.variable}>
-      <body>{children}</body>
+    <html lang="en" className={`${courierPrime.variable} ${inter.variable}`}>
+      <body className={`${inter.className} antialiased`}>{children}</body>
     </html>
   );
 }

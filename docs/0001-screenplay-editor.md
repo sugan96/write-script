@@ -33,7 +33,7 @@ The saved script is a [Fountain](https://fountain.io) text file. The editor only
 In the script, a character is its name as text (`JOHN`). The character sheet links to the script by name.
 
 - Why: this matches how screenplays work and how Final Draft, Fade In and Highland build their character lists. Storing IDs in the script would create two sources of truth and need rules for names typed outside the sheet, deleted sheet entries, and pasted text.
-- Rename: a bulk replace in the script (character lines and caps mentions in action), shown to the writer as "N changes" and applied as one undoable transaction.
+- Rename: a bulk replace across every script in the project (character lines and caps mentions in action), plus a rename of the character file (decision 0003-3). Shown to the writer as "N changes in M scripts" and applied as one undoable step.
 - Limit: two different characters cannot share a name. Writers use `GUARD #1` / `GUARD #2`.
 
 ### 3. Element entry: Fountain rules plus shortcuts
@@ -68,8 +68,11 @@ The script page uses physical units so it prints at true size: `pt` for margins,
 
 All page geometry is computed in TypeScript (`PAGE` in `app/editor/screenplay.ts`, in points) and CSS only receives final values. CSS `calc()` is not used. Text widths stay in `ch` so the browser wraps on the real glyph width of the loaded font.
 
-- US Letter, 12pt Courier at 10 characters and 6 lines per inch. Line height 12pt.
-- Margins: 1.5in left, 1in right, 1in top. The bottom margin is what remains after 55 lines (792 - 72 - 55 x 12 = 60pt), so a page is exactly 11in.
+- Paper is set per project (`paper` in `project.json`, decision 0003-1): `"a4"` (default for new projects) or `"letter"`. A4 is the norm in the UK, Europe, India and Australia; US Letter is the US industry standard.
+- 12pt Courier at 10 characters and 6 lines per inch. Line height 12pt. The text block is the same on both papers (60 characters), so a script reflows only vertically when the paper changes.
+- US Letter (612 x 792pt): margins 1.5in left, 1in right, 1in top. 55 lines; the bottom margin is what remains (792 - 72 - 55 x 12 = 60pt).
+- A4 (595.28 x 841.89pt): 1.5in left, 1in top, right margin 55.28pt (595.28 - 108 - 432) to keep the 60-character line. 58 lines; bottom margin 841.89 - 72 - 58 x 12 = 73.89pt.
+- The editor shows every page at full paper size, including the last page.
 - Text widths: action and scene headings 60 characters, character names start at 22ch, dialogue 35 characters from 10ch, parentheticals 25 characters from 16ch.
 
 ### 7. Font: Courier Prime, bundled

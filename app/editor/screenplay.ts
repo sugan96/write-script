@@ -24,21 +24,31 @@ export const WIDTH: Record<Kind, number> = {
   transition: 60,
 };
 
-export const LINES_PER_PAGE = 55;
-
 // Print geometry in points (72pt = 1in): 12pt Courier at 10 chars and 6 lines
-// per inch on US Letter. CSS receives these as final values; no calc().
+// per inch. CSS receives these as final values; no calc(). Decision 0001-6.
 const INCH = 72;
 export const LINE_PT = 12;
 export const CHAR_PT = 7.2;
-export const PAGE = {
-  height: 11 * INCH,
-  top: 1 * INCH,
-  left: 1.5 * INCH,
-  right: 1 * INCH,
-  // whatever is left after the top margin and the text lines: 60pt
-  bottom: 11 * INCH - 1 * INCH - LINES_PER_PAGE * LINE_PT,
+const TEXT_PT = 60 * CHAR_PT; // the 60-character line, the same on every paper
+
+export type Paper = "a4" | "letter";
+export type Geometry = { width: number; height: number; top: number; left: number; right: number; bottom: number; lines: number };
+
+function geometry(width: number, height: number, lines: number): Geometry {
+  const top = 1 * INCH;
+  const left = 1.5 * INCH;
+  // right and bottom margins are what is left after the text block
+  return { width, height, top, left, right: width - left - TEXT_PT, bottom: height - top - lines * LINE_PT, lines };
+}
+
+export const PAPERS: Record<Paper, Geometry> = {
+  a4: geometry(595.28, 841.89, 58), // right 55.28pt, bottom 73.89pt
+  letter: geometry(612, 792, 55), // right 72pt, bottom 60pt
 };
+
+// US Letter values, kept for existing callers and tests.
+export const PAGE = PAPERS.letter;
+export const LINES_PER_PAGE = PAPERS.letter.lines;
 
 const SCENE = /^(INT|EXT|EST|INT\.?\/EXT|I\/E)[. ]/i;
 const isUpper = (s: string) => /[A-Z]/.test(s) && s === s.toUpperCase();
@@ -133,7 +143,8 @@ function trySplit(block: Line[], remaining: number): Split | null {
 
 // `hidden`: blank lines that fall past the end of a full page. A printed
 // screenplay drops them, so the editor hides them too.
-export function paginate(lines: Line[], perPage = LINES_PER_PAGE): { breaks: Break[]; hidden: number[] } {
+// `used`: lines filled on the last page, so the editor can draw it at full height.
+export function paginate(lines: Line[], perPage = LINES_PER_PAGE): { breaks: Break[]; hidden: number[]; used: number } {
   const blocks = group(lines);
   const breaks: Break[] = [];
   const hidden: number[] = [];
@@ -170,5 +181,5 @@ export function paginate(lines: Line[], perPage = LINES_PER_PAGE): { breaks: Bre
     breaks.push({ pos: first.from, mid: false, filler: remaining, page: breaks.length + 2 });
     used = h;
   }
-  return { breaks, hidden };
+  return { breaks, hidden, used };
 }

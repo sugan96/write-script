@@ -1,0 +1,7 @@
+# Cloudflare Pages response headers (docs/0002-storage-byos.md decision 5).
+# ponytail: no Content-Security-Policy yet. Next's static export uses inline
+# scripts, so a CSP needs script hashes; add it with Google Drive OAuth.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
