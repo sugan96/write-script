@@ -73,6 +73,17 @@ A name typed in a script with no character file shows in the character list as "
 
 The character list is every name used in any script, plus every character file. A sheet whose name no longer appears in any script stays in the list, so the writer can decide whether to delete it.
 
+The Characters heading is always shown. An empty list shows a short line that explains where names come from, so the section never looks missing.
+
+### 8. New character from the sidebar
+
+A writer often develops a character before writing them into a script. A **+** button next to the Characters heading creates a sheet without a script line.
+
+- It opens a name field at the top of the list. Enter creates the sheet; Escape or an empty name cancels.
+- The name is saved in capitals. Suggestions insert the name as stored, and Fountain reads a character cue only when it is in capitals.
+- If a sheet with that name already exists (without regard to case), the app opens it instead. If the name is used in a script but has no sheet, it is the same as **Create sheet**.
+- The same file rules as decision 5 apply: only `name:` is written, a slug collision shows an error, and no file is ever overwritten.
+
 ### 6. The only link that changes both sides is rename
 
 - Deleting a character sheet never changes a script.
