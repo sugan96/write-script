@@ -1,5 +1,7 @@
 # Notes for agents
 
+@AGENTS.md
+
 ## Decision docs
 
 Design and technology decisions live in `docs/`, one file per decision, numbered in order (`0001-screenplay-editor.md`, `0002-...`).
