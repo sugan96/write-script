@@ -54,8 +54,7 @@ export function Home() {
   if (supported === null) return null;
   return (
     <div className="flex min-h-screen flex-col bg-[#FAFAF9] text-zinc-900">
-      <Header />
-      {supported ? <Projects /> : <Unsupported />}
+      {supported ? <Projects /> : <><Header /><Unsupported /></>}
     </div>
   );
 }
@@ -128,6 +127,7 @@ function Projects() {
 
   return (
     <>
+      <Header />
       {rows.length === 0 ? (
         <Empty onNew={() => setCreating(true)} onOpen={openFolder} />
       ) : (

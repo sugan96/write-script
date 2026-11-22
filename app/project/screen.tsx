@@ -1,11 +1,14 @@
 "use client";
 
 // Project screen: script list, editor, autosave with conflict check (docs/0002-storage-byos.md decision 3,
-// docs/0003-project-format.md decision 1).
+// docs/0003-project-format.md decision 1). Design: docs/design/project/.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronLeft, FileText } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Editor from "../editor/editor";
+import type { Paper } from "../editor/screenplay";
+import { readPaper, writePaper } from "../home/project";
 import { deleteDraft, findDraft, putDraft } from "./drafts";
 import { ConflictError, readFile, saveCopy, saveFile } from "./save";
 
@@ -14,13 +17,14 @@ type Doc = { handle: FileSystemFileHandle; text: string; key: number };
 
 const SCRIPT_FONT = "font-[family-name:var(--font-script)]";
 const SAVE_DELAY_MS = 1000;
-const LABEL: Record<Status, string> = {
-  saved: "Saved",
-  unsaved: "Unsaved changes",
-  saving: "Saving…",
-  conflict: "Not saved",
-  error: "Save failed",
+const STATUS: Record<Status, { label: string; dot: string; pill: string }> = {
+  saved: { label: "Saved", dot: "bg-green-600", pill: "bg-[#F4F4F2] text-zinc-700" },
+  unsaved: { label: "Unsaved changes", dot: "bg-zinc-400", pill: "bg-[#F4F4F2] text-zinc-700" },
+  saving: { label: "Saving…", dot: "bg-zinc-400", pill: "bg-[#F4F4F2] text-zinc-700" },
+  conflict: { label: "Not saved", dot: "bg-red-600", pill: "bg-red-50 text-red-800" },
+  error: { label: "Save failed", dot: "bg-red-600", pill: "bg-red-50 text-red-800" },
 };
+const PAPER_LABEL: Record<Paper, string> = { a4: "A4", letter: "US Letter" };
 
 async function listScripts(dir: FileSystemDirectoryHandle): Promise<{ folder: FileSystemDirectoryHandle; files: FileSystemFileHandle[] }> {
   const folder = await dir.getDirectoryHandle("scripts", { create: true });
@@ -42,6 +46,8 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
   const [doc, setDoc] = useState<Doc | null>(null);
   const [status, setStatus] = useState<Status>("saved");
   const [error, setError] = useState<string | null>(null);
+  const [paper, setPaper] = useState<Paper>("a4");
+  const [pages, setPages] = useState(0);
 
   const folder = useRef<FileSystemDirectoryHandle | null>(null);
   const current = useRef<FileSystemFileHandle | null>(null);
@@ -129,8 +135,9 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
   }, [show]);
 
   useEffect(() => {
-    listScripts(dir)
-      .then(async ({ folder: f, files }) => {
+    Promise.all([readPaper(dir), listScripts(dir)])
+      .then(async ([p, { folder: f, files }]) => {
+        setPaper(p);
         folder.current = f;
         setScripts(files);
         const first = await mostRecent(files);
@@ -172,6 +179,19 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
     onClose();
   };
 
+  const changePaper = async (value: string) => {
+    const next = value as Paper;
+    if (next === paper) return;
+    try {
+      await writePaper(dir, next);
+      setPaper(next);
+      // The editor rebuilds for the new paper; hand it the latest text, not the text it opened with.
+      setDoc((d) => d && { ...d, text: text.current, key: Date.now() });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
   // Conflict choices (docs/0002-storage-byos.md decision 3).
   const loadDisk = async () => {
     const handle = current.current!;
@@ -202,45 +222,101 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
     }
   };
 
+  const s = STATUS[status];
+  const unsavedName = status === "conflict" || status === "error" ? doc?.handle.name : undefined;
+
   return (
-    <div className="flex flex-1 flex-wrap">
-      <aside className="flex w-full flex-col gap-4 border-b border-[#EBEBE9] bg-white p-4 md:w-60 md:border-b-0 md:border-r">
-        <Button variant="ghost" size="sm" className="self-start text-zinc-600" onClick={back}><ChevronLeft aria-hidden />Projects</Button>
-        <h1 className={`${SCRIPT_FONT} px-2 text-lg font-bold`}>{dir.name}</h1>
-        <nav aria-label="Scripts" className="flex flex-col gap-1">
-          <span className="px-2 text-xs font-semibold text-zinc-500">Scripts</span>
-          {scripts.map((s) => {
-            const active = doc?.handle.name === s.name;
-            return (
-              <button key={s.name} type="button" onClick={() => open(s)} aria-current={active ? "page" : undefined} className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${active ? "bg-zinc-100 font-medium text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"}`}>
-                <FileText aria-hidden className="size-4 shrink-0 text-zinc-500" />
-                <span className="truncate">{title(s)}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-      <section className="flex min-w-0 flex-[999_1_560px] flex-col">
-        {doc && (
-          <div className="flex items-center justify-between gap-4 border-b border-[#EBEBE9] bg-white px-6 py-3">
-            <span className={`${SCRIPT_FONT} font-bold`}>{title(doc.handle)}</span>
-            <span role="status" className={`text-[13px] ${status === "conflict" || status === "error" ? "text-red-700" : "text-zinc-500"}`}>{LABEL[status]}</span>
-          </div>
-        )}
-        {status === "conflict" && (
-          <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-yellow-50 px-6 py-3 text-sm text-yellow-900">
-            <AlertTriangle aria-hidden className="size-4 shrink-0" />
-            <span className="flex-1">This script changed on disk while you had unsaved edits. Autosave is paused.</span>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={loadDisk}>Load disk version</Button>
-              <Button size="sm" variant="outline" onClick={keepCopy}>Save mine as a copy</Button>
-              <Button size="sm" onClick={keepMine}>Keep mine</Button>
+    <div className="flex h-screen flex-col bg-[#EDEDEB]">
+      <header className="flex h-13 flex-none items-center justify-between gap-4 border-b border-[#E4E4E2] bg-white px-4">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Button variant="ghost" size="sm" className="text-zinc-600" onClick={back}><ChevronLeft aria-hidden />Projects</Button>
+          <span aria-hidden className="text-[#D4D4D1]">/</span>
+          <span className={`${SCRIPT_FONT} truncate px-1.5 text-sm font-bold`}>{dir.name}</span>
+          {doc && (
+            <>
+              <span aria-hidden className="text-[#D4D4D1]">/</span>
+              <span className="truncate px-1.5 text-[13px]">{title(doc.handle)}</span>
+            </>
+          )}
+        </div>
+        <div className="flex flex-none items-center gap-2">
+          {doc && (
+            <>
+              <span role="status" className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium ${s.pill}`}>
+                <span aria-hidden className={`size-[7px] rounded-full ${s.dot}`} />{s.label}
+              </span>
+              <span className="px-1.5 text-xs text-zinc-600">{pages} {pages === 1 ? "page" : "pages"}</span>
+            </>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" aria-label={`Paper size: ${PAPER_LABEL[paper]}`}>
+                {PAPER_LABEL[paper]}<ChevronDown aria-hidden className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Paper size</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={paper} onValueChange={changePaper}>
+                <DropdownMenuRadioItem value="a4" className="min-h-11 flex-col items-start gap-0.5">
+                  <span className="text-[13px] font-medium">A4</span>
+                  <span className="text-xs text-zinc-600">210 × 297 mm · UK, Europe, Asia</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="letter" className="min-h-11 flex-col items-start gap-0.5">
+                  <span className="text-[13px] font-medium">US Letter</span>
+                  <span className="text-xs text-zinc-600">8.5 × 11 in · US industry standard</span>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <p className="px-2 py-1.5 text-xs leading-normal text-zinc-600">Applies to every script in this project. Page breaks and page count change.</p>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {status === "conflict" && doc && (
+        <div role="alert" className="flex flex-none flex-wrap items-center gap-x-4 gap-y-3 border-b border-amber-200 bg-amber-50 py-3 pl-5 pr-4">
+          <div className="flex min-w-[320px] flex-1 items-start gap-2.5">
+            <AlertTriangle aria-hidden className="mt-px size-[18px] flex-none text-amber-700" />
+            <div className="flex flex-col gap-0.5 text-[13px]">
+              <span className="font-semibold text-amber-950">{title(doc.handle)} changed on disk</span>
+              <span className="text-amber-800">Another device or app saved this script while you had unsaved edits. Autosave is paused until you choose.</span>
             </div>
           </div>
-        )}
-        {error && <p role="alert" className="border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-900">{error}</p>}
-        {doc ? <Editor key={doc.key} initial={doc.text} onChange={onChange} /> : null}
-      </section>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={loadDisk}>Load disk version</Button>
+            <Button size="sm" variant="outline" onClick={keepCopy}>Save mine as a copy</Button>
+            <Button size="sm" onClick={keepMine}>Keep mine</Button>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="flex-none border-b border-red-200 bg-red-50 px-5 py-3 text-[13px] text-red-900">{error}</p>}
+
+      <div className="flex min-h-0 flex-1">
+        <aside className="hidden w-[248px] flex-none flex-col gap-[22px] overflow-y-auto border-r border-[#E4E4E2] bg-[#FAFAF9] px-3 py-4 md:flex">
+          <nav aria-label="Scripts" className="flex flex-col gap-0.5">
+            <span className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Scripts</span>
+            {scripts.map((f) => {
+              const active = doc?.handle.name === f.name;
+              return (
+                <button
+                  key={f.name}
+                  type="button"
+                  onClick={() => open(f)}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex h-[34px] cursor-pointer items-center gap-2 rounded-[7px] px-2 text-left text-[13px] ${active ? "bg-white font-medium text-zinc-900 shadow-[0_0_0_1px_#E4E4E2,0_1px_2px_rgba(16,16,20,0.04)]" : "text-zinc-700 hover:bg-white"}`}
+                >
+                  <FileText aria-hidden className={`size-[15px] flex-none ${active ? "text-zinc-700" : "text-zinc-500"}`} />
+                  <span className="truncate">{title(f)}</span>
+                  {unsavedName === f.name && <span aria-label="Not saved" className="ml-auto size-[7px] flex-none rounded-full bg-red-600" />}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+        <main className="min-w-0 flex-1 overflow-auto">
+          {doc && <Editor key={doc.key} initial={doc.text} paper={paper} onChange={onChange} onPages={setPages} />}
+        </main>
+      </div>
     </div>
   );
 }
