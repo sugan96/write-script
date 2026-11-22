@@ -58,9 +58,16 @@ On a character line, suggestions come from:
 
 Extensions such as `(V.O.)`, `(O.S.)` and `(CONT'D)` are removed before matching, so `JOHN (V.O.)` is `JOHN`.
 
+- Any `(...)` at the end of the line is removed, not only those three, so `JOHN (ON PHONE)` is `JOHN`. The `@` prefix and the `^` dual-dialogue mark are removed too.
+- Names match without regard to case: a sheet named `John` and the cue `JOHN` are one character.
+- Suggestions show on a line in capitals (or starting with `@`) after a blank line. A cue being typed is not yet a character line, because the dialogue below it is not written yet.
+
 ### 5. New names in a script do not create files
 
 A name typed in a script with no character file shows in the character list as "no sheet yet" with a **Create sheet** button. Nothing is written until the writer clicks.
+
+- **Create sheet** writes `characters/<slug>.md` with only `name:`, spelled as in the script. The new sheet is empty, so it opens in Edit (decision 7).
+- If that file already exists (two names with the same slug, such as `GUARD 1` and `GUARD-1`), the app shows an error and writes nothing. It never overwrites a file.
 
 - Why: auto-creating files turns every typo (`JHON`) into a file that syncs to every device, and asking each time interrupts writing for every one-line minor character.
 
