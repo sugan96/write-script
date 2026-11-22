@@ -22,7 +22,7 @@ Heist/
     maria.md
 ```
 
-- `project.json` marks the folder as a project and holds a format version: `{ "version": 1 }`. Later features use the version to migrate files.
+- `project.json` marks the folder as a project and holds a format version and the paper size: `{ "version": 1, "paper": "a4" }`. Later features use the version to migrate files. `paper` is `"a4"` or `"letter"` (decision 0001-6); new projects get `"a4"`, and a missing `paper` reads as `"a4"`.
 - `scripts/` holds one or more Fountain files (decision 0001-1). All scripts share the cast in `characters/`.
 - Later features add their own folders next to these (for example `locations/`, `notes/`).
 - Why a folder and not one file: the app will grow, and separate files sync better. Dropbox, iCloud and Drive sync whole files, so edits on two devices to different characters never collide.
