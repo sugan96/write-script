@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Static files only, no server (docs/0002-storage-byos.md decision 5).
+  output: "export",
   turbopack: {
     rules: {
       "*.css": {
