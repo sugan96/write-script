@@ -38,11 +38,25 @@ export async function createProject(parent: FileSystemDirectoryHandle, raw: stri
   const name = raw.trim();
   if (await has(parent, name)) throw new Error(`"${name}" already exists in this folder. Choose another name.`);
   const dir = await parent.getDirectoryHandle(name, { create: true });
-  await writeText(dir, "project.json", JSON.stringify({ version: FORMAT_VERSION }) + "\n");
+  await writeText(dir, "project.json", JSON.stringify({ version: FORMAT_VERSION, paper: "a4" }) + "\n");
   const scripts = await dir.getDirectoryHandle("scripts", { create: true });
   await writeText(scripts, `${name}.fountain`, "");
   await dir.getDirectoryHandle("characters", { create: true });
   return dir;
+}
+
+async function readJson(dir: FileSystemDirectoryHandle): Promise<Record<string, unknown>> {
+  return JSON.parse(await (await (await dir.getFileHandle("project.json")).getFile()).text());
+}
+
+/** The project's paper size (decision 0001-6). Missing or unknown reads as A4. */
+export async function readPaper(dir: FileSystemDirectoryHandle): Promise<"a4" | "letter"> {
+  return (await readJson(dir)).paper === "letter" ? "letter" : "a4";
+}
+
+/** Changes the paper size, keeping every other key in project.json. */
+export async function writePaper(dir: FileSystemDirectoryHandle, paper: "a4" | "letter"): Promise<void> {
+  await writeText(dir, "project.json", JSON.stringify({ ...(await readJson(dir)), paper }) + "\n");
 }
 
 /** Error message when `dir` is not a project this app can open, or null when it is. */

@@ -1,7 +1,7 @@
 // Run: node --test app/home/project.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createProject, nameError, projectError } from "./project.ts";
+import { createProject, nameError, projectError, readPaper, writePaper } from "./project.ts";
 
 const notFound = () => Object.assign(new Error("not found"), { name: "NotFoundError" });
 
@@ -45,7 +45,11 @@ test("createProject writes the folder layout and opens cleanly", async () => {
   const parent = dir();
   const p = await createProject(parent, " Heist ");
   assert.equal(parent.entries.get("Heist"), p);
-  assert.equal(p.entries.get("project.json").text, '{"version":1}\n');
+  assert.equal(p.entries.get("project.json").text, '{"version":1,"paper":"a4"}\n');
+  assert.equal(await readPaper(p), "a4");
+  await writePaper(p, "letter");
+  assert.equal(p.entries.get("project.json").text, '{"version":1,"paper":"letter"}\n');
+  assert.equal(await readPaper(p), "letter");
   assert.equal(p.entries.get("scripts").entries.get("Heist.fountain").text, "");
   assert.ok(p.entries.get("characters").entries instanceof Map);
   assert.equal(await projectError(p), null);
