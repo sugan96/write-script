@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Character sheet - edit</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Courier+Prime:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EDEDEB}
+a{color:#18181B}a:hover{color:#52525B}
+.q{display:flex;flex-direction:column;gap:6px}
+.q label{font-size:13px;font-weight:500;color:#27272A}
+.q textarea,.f input{font:400 14px/22px Inter,system-ui,sans-serif;color:#18181B;background:#FFFFFF;border:1px solid #E4E4E2;border-radius:8px;padding:8px 12px;box-sizing:border-box;width:100%;resize:vertical}
+.card{background:#FFFFFF;border:1px solid #E4E4E2;border-radius:12px;box-shadow:0 1px 2px rgba(16,16,20,0.04)}
+details.card>summary{list-style:none;height:56px;padding:0 20px 0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;border-radius:12px}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary h2{margin:0;font-size:15px;font-weight:600;color:#18181B}
+details.card .meta{display:flex;align-items:center;gap:10px;font-size:12px;color:#52525B}
+details.card .chev{transition:transform 0.15s}
+details[open].card .chev{transform:rotate(180deg)}
+details.card .body{padding:4px 24px 24px;display:flex;flex-direction:column;gap:18px}
+.add{align-self:flex-start;height:32px;padding:0 10px;border:1px dashed #D4D4D1;border-radius:7px;background:transparent;font:500 13px Inter,sans-serif;color:#52525B;display:flex;align-items:center;gap:6px;cursor:pointer}
+.f{display:flex;flex-direction:column;gap:6px}
+.f label{font-size:12px;font-weight:500;color:#52525B}
+.seg{display:flex;padding:2px;border-radius:8px;background:#F0F0EE}
+.seg button{height:26px;padding:0 12px;border:0;border-radius:6px;background:transparent;font:500 12px Inter,sans-serif;color:#52525B;cursor:pointer;display:flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:#FFFFFF;color:#18181B;box-shadow:0 0 0 1px #E4E4E2,0 1px 2px rgba(16,16,20,0.06)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+</style>
+<div style="min-height: 2200px; display: flex; flex-direction: column; background: #EDEDEB; font-family: Inter, system-ui, sans-serif; color: #18181B; -webkit-font-smoothing: antialiased">
+
+<header style="height: 52px; flex: none; background: #FFFFFF; border-bottom: 1px solid #E4E4E2; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px">
+<div style="display: flex; align-items: center; gap: 6px; min-width: 0">
+<a href="../home/home.html" style="height: 32px; padding: 0 8px; border-radius: 7px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: #52525B; text-decoration: none">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+Projects</a>
+<span aria-hidden="true" style="color: #D4D4D1">/</span>
+<span style="font-family: 'Courier Prime', monospace; font-weight: 700; font-size: 14px; padding: 0 6px">Heist</span>
+<span aria-hidden="true" style="color: #D4D4D1">/</span>
+<span style="font-family: 'Courier Prime', monospace; font-size: 13px; color: #18181B; padding: 0 6px">JOHN</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span role="status" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; background: #F4F4F2; font-size: 12px; font-weight: 500; color: #3F3F46"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: #16A34A"></span>Saved</span>
+<div class="seg" role="group" aria-label="Mode">
+<a href="character-view.html" style="text-decoration: none"><button type="button" aria-pressed="false"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>View</button></a>
+<button type="button" aria-pressed="true"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>Edit</button>
+</div>
+</div>
+</header>
+
+<div style="flex: 1; display: flex; min-height: 0">
+<aside style="width: 248px; flex: none; background: #FAFAF9; border-right: 1px solid #E4E4E2; padding: 16px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+<nav aria-label="Scripts" style="display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 0 8px 6px">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #52525B">Scripts</span>
+<button type="button" aria-label="New script" style="width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: #52525B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+</div>
+<a href="project.html" style="height: 34px; padding: 0 8px; border-radius: 7px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3F3F46; text-decoration: none">
+<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>Heist</a>
+<a href="#" style="height: 34px; padding: 0 8px; border-radius: 7px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3F3F46; text-decoration: none">
+<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>Heist - rewrite</a>
+</nav>
+<nav aria-label="Characters" style="display: flex; flex-direction: column; gap: 2px">
+<div style="padding: 0 8px 6px"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #52525B">Characters</span></div>
+<a href="#" style="height: 32px; padding: 0 8px; border-radius: 7px; display: flex; align-items: center; font-family: 'Courier Prime', monospace; font-size: 13px; color: #27272A; text-decoration: none">MARA</a>
+<a href="#" aria-current="page" style="height: 32px; padding: 0 8px; border-radius: 7px; background: #FFFFFF; box-shadow: 0 0 0 1px #E4E4E2, 0 1px 2px rgba(16,16,20,0.04); display: flex; align-items: center; font-family: 'Courier Prime', monospace; font-size: 13px; font-weight: 700; color: #18181B; text-decoration: none">JOHN</a>
+<div style="height: 32px; padding: 0 4px 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px">
+<span style="font-family: 'Courier Prime', monospace; font-size: 13px; color: #52525B">GUARD</span>
+<button type="button" style="height: 24px; padding: 0 8px; border: 1px dashed #D4D4D1; border-radius: 6px; background: transparent; font: 500 11px Inter, sans-serif; color: #52525B; cursor: pointer">Create sheet</button>
+</div>
+</nav>
+</aside>
+
+<main style="flex: 1; min-width: 0; padding: 40px 32px 80px; display: flex; justify-content: center">
+<div style="width: 720px; max-width: 100%; display: flex; flex-direction: column; gap: 12px">
+
+<section aria-label="Header" class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 22px; margin-bottom: 8px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="name" style="font-size: 12px; font-weight: 500; color: #52525B">Name</label>
+<input id="name" value="JOHN" style="font: 700 28px/36px 'Courier Prime', monospace; color: #18181B; border: 1px solid #E4E4E2; border-radius: 8px; padding: 6px 12px; box-sizing: border-box; width: 100%">
+<span style="font-size: 12px; color: #71717A">Renaming updates every script in this project.</span>
+</div>
+<div class="q"><label for="desc">Short description</label><textarea id="desc" rows="2">Ex-safecracker. Wants out, gets pulled back in.</textarea></div>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px">
+<div class="f"><label for="nick">Nickname</label><input id="nick" value="Johnny"></div>
+<div class="f"><label for="gender">Gender</label><input id="gender" value="Male"></div>
+<div class="f"><label for="age">Age</label><input id="age" value="42"></div>
+<div class="f"><label for="height">Height</label><input id="height" value=""></div>
+<div class="f"><label for="born">Place of birth</label><input id="born" value="Glasgow"></div>
+<div class="f"><label for="nat">Nationality</label><input id="nat" value="British"></div>
+<div class="f" style="grid-column: span 3"><label for="job">Occupation</label><input id="job" value="Safecracker"></div>
+</div>
+</section>
+
+<details class="card" open="">
+<summary><h2>Looks &amp; build</h2><span class="meta">1 of 3 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+<div class="body">
+<div class="q"><label for="q11">What do people notice first about them?</label><textarea id="q11" rows="2">A scar through the left eyebrow.</textarea></div>
+<div class="q"><label for="q12">How do they move and carry themselves?</label><textarea id="q12" rows="2"></textarea></div>
+<div class="q"><label for="q13">Any scars, tattoos or marks?</label><textarea id="q13" rows="2"></textarea></div>
+<button type="button" class="add"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add field</button>
+</div>
+</details>
+
+<details class="card">
+<summary><h2>Style &amp; dress</h2><span class="meta">0 of 3 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+
+<details class="card" open="">
+<summary><h2>Speech &amp; mannerisms</h2><span class="meta">1 of 4 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+<div class="body">
+<div class="q"><label for="q31">How do they talk? Pace, volume, choice of words.</label><textarea id="q31" rows="2"></textarea></div>
+<div class="q"><label for="q32">Words or phrases they keep using</label><textarea id="q32" rows="2"></textarea></div>
+<div class="q"><label for="q33">What do they do when they are nervous?</label><textarea id="q33" rows="2"></textarea></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; margin: 0 -12px; border-radius: 10px; background: #FAFAF9; border: 1px solid #EEEEEC">
+<div style="display: flex; align-items: center; gap: 6px">
+<button type="button" aria-label="Drag to reorder Accent" style="width: 28px; height: 28px; flex: none; border: 0; border-radius: 6px; background: transparent; color: #71717A; display: flex; align-items: center; justify-content: center; cursor: grab"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg></button>
+<label for="c1h" class="sr">Field name</label>
+<input id="c1h" value="Accent" style="flex: 1; min-width: 0; height: 30px; font: 500 13px Inter, sans-serif; color: #27272A; border: 1px solid transparent; border-radius: 6px; padding: 0 6px; background: transparent">
+<span style="font-size: 11px; font-weight: 500; color: #52525B; background: #F0F0EE; border-radius: 999px; padding: 2px 8px">Custom</span>
+<button type="button" aria-label="Remove Accent" style="width: 28px; height: 28px; flex: none; border: 0; border-radius: 6px; background: transparent; color: #71717A; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="q" style="padding-left: 34px"><label for="c1" class="sr">Accent</label><textarea id="c1" rows="2">Glaswegian, softened by years in London.</textarea></div>
+</div>
+<button type="button" class="add"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add field</button>
+</div>
+</details>
+
+<details class="card">
+<summary><h2>Early life &amp; background</h2><span class="meta">0 of 3 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+<details class="card">
+<summary><h2>Family &amp; key relationships</h2><span class="meta">1 of 3 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+<details class="card">
+<summary><h2>Personality</h2><span class="meta">0 of 4 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+<details class="card">
+<summary><h2>Psychology</h2><span class="meta">0 of 3 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+<details class="card">
+<summary><h2>Goals &amp; fears</h2><span class="meta">1 of 4 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+<details class="card">
+<summary><h2>Character arc</h2><span class="meta">0 of 1 answered<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span></summary>
+</details>
+
+</div>
+</main>
+</div>
+</div>
+</body>
+</html>

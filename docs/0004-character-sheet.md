@@ -18,6 +18,8 @@ Header (front matter, one-line answers):
 - Name (required), description (first body paragraph)
 - Nickname, Gender, Age, Height, Place of birth, Nationality, Occupation
 
+Front matter keys: `name`, `nickname`, `gender`, `age`, `height`, `birthplace`, `nationality`, `occupation`.
+
 Sections (long answers, `##` headings):
 
 1. Looks & build
@@ -43,7 +45,7 @@ The writer can add a field with their own heading and text inside any section, f
 
 - `useFieldArray` handles adding, removing and reordering custom fields.
 - Inputs are uncontrolled, so typing in one of about 50 text areas does not re-render the form.
-- `reset()` reloads the form when the file changes on disk or a rename comes from the script.
+- When the file changes on disk or a rename comes from the script, the form is mounted again with the new file, the same way the script editor reloads.
 - No submit button. Changes save through the autosave in decision 0002-3.
 - No validation library. The only rules are that `name` is required and unique in the project.
 
@@ -69,6 +71,15 @@ The character list is every name used in any script, plus every character file. 
 - Deleting a character sheet never changes a script.
 - Removing all of a character's lines from the scripts never deletes the sheet.
 - Renaming a character (from the sheet or the script) updates the file and every script in the project, as described in decision 0001-2.
+
+### 7. View and edit modes, sections as accordions
+
+Design: `docs/design/project/character-edit.html` and `character-view.html`.
+
+- A switch in the header toggles **View** and **Edit**.
+- View is read-only. It shows the name, description, filled-in header fields, and only sections with answers, each with its questions and answers. Empty sections are hidden, with a line that says how many.
+- Edit is the form. Each section is a native `<details>` accordion with an "answered" count in its summary. Sections with an answer start open; empty ones start closed.
+- A sheet with any content opens in View. An empty sheet (for example one just created) opens in Edit. The mode and open sections are not remembered.
 
 ## Out of scope for now
 

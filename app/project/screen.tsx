@@ -9,11 +9,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadio
 import Editor from "../editor/editor";
 import type { Paper } from "../editor/screenplay";
 import { readPaper, writePaper } from "../home/project";
+import { parseCharacter } from "./character";
+import { CharacterSheet, initialMode, type Mode, ModeSwitch } from "./character-sheet";
 import { deleteDraft, findDraft, putDraft } from "./drafts";
 import { ConflictError, readFile, saveCopy, saveFile } from "./save";
 
 type Status = "saved" | "unsaved" | "saving" | "conflict" | "error";
-type Doc = { handle: FileSystemFileHandle; text: string; key: number };
+type Doc = { handle: FileSystemFileHandle; name: string; text: string; key: number };
+type CharacterFile = { handle: FileSystemFileHandle; name: string };
 
 const SCRIPT_FONT = "font-[family-name:var(--font-script)]";
 const SAVE_DELAY_MS = 1000;
@@ -39,11 +42,27 @@ async function mostRecent(files: FileSystemFileHandle[]): Promise<FileSystemFile
   return files[times.indexOf(Math.max(...times))];
 }
 
-const title = (h: FileSystemFileHandle) => h.name.replace(/\.fountain$/, "");
+const title = (h: FileSystemFileHandle) => h.name.replace(/\.(fountain|md)$/, "");
+const isSheet = (h: FileSystemFileHandle) => h.name.endsWith(".md");
+// The name: field is the identity (docs/0003-project-format.md decision 3); the filename is a fallback.
+const characterName = (h: FileSystemFileHandle, text: string) => parseCharacter(text).front.name?.trim() || title(h);
+
+async function listCharacters(dir: FileSystemDirectoryHandle): Promise<CharacterFile[]> {
+  const folder = await dir.getDirectoryHandle("characters", { create: true });
+  const files: CharacterFile[] = [];
+  for await (const h of folder.values()) {
+    if (h.kind !== "file" || !h.name.endsWith(".md")) continue;
+    const handle = h as FileSystemFileHandle;
+    files.push({ handle, name: characterName(handle, (await readFile(handle)).text) });
+  }
+  return files.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle; onClose: () => void }) {
   const [scripts, setScripts] = useState<FileSystemFileHandle[]>([]);
+  const [characters, setCharacters] = useState<CharacterFile[]>([]);
   const [doc, setDoc] = useState<Doc | null>(null);
+  const [mode, setMode] = useState<Mode>("view");
   const [status, setStatus] = useState<Status>("saved");
   const [error, setError] = useState<string | null>(null);
   const [paper, setPaper] = useState<Paper>("a4");
@@ -81,7 +100,9 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
       blocked.current = draft.base !== disk.lastModified;
       next = blocked.current ? "conflict" : "unsaved";
     }
-    setDoc({ handle, text: text.current, key: Date.now() });
+    const sheet = isSheet(handle);
+    if (sheet) setMode(initialMode(text.current));
+    setDoc({ handle, name: sheet ? characterName(handle, text.current) : title(handle), text: text.current, key: Date.now() });
     setStatus(next);
     setError(null);
     return next === "unsaved";
@@ -135,11 +156,12 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
   }, [show]);
 
   useEffect(() => {
-    Promise.all([readPaper(dir), listScripts(dir)])
-      .then(async ([p, { folder: f, files }]) => {
+    Promise.all([readPaper(dir), listScripts(dir), listCharacters(dir)])
+      .then(async ([p, { folder: f, files }, cast]) => {
         setPaper(p);
         folder.current = f;
         setScripts(files);
+        setCharacters(cast);
         const first = await mostRecent(files);
         if (first && (await show(first))) timer.current = window.setTimeout(save, SAVE_DELAY_MS);
       })
@@ -224,6 +246,9 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
 
   const s = STATUS[status];
   const unsavedName = status === "conflict" || status === "error" ? doc?.handle.name : undefined;
+  const sheet = doc ? isSheet(doc.handle) : false;
+  const navItem = (active: boolean) =>
+    `flex cursor-pointer items-center gap-2 rounded-[7px] px-2 text-left text-[13px] ${active ? "bg-white font-medium text-zinc-900 shadow-[0_0_0_1px_#E4E4E2,0_1px_2px_rgba(16,16,20,0.04)]" : "text-zinc-700 hover:bg-white"}`;
 
   return (
     <div className="flex h-screen flex-col bg-[#EDEDEB]">
@@ -235,19 +260,20 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
           {doc && (
             <>
               <span aria-hidden className="text-[#D4D4D1]">/</span>
-              <span className="truncate px-1.5 text-[13px]">{title(doc.handle)}</span>
+              <span className={`truncate px-1.5 text-[13px] ${sheet ? SCRIPT_FONT : ""}`}>{doc.name}</span>
             </>
           )}
         </div>
         <div className="flex flex-none items-center gap-2">
-          {doc && (
-            <>
-              <span role="status" className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium ${s.pill}`}>
-                <span aria-hidden className={`size-[7px] rounded-full ${s.dot}`} />{s.label}
-              </span>
-              <span className="px-1.5 text-xs text-zinc-600">{pages} {pages === 1 ? "page" : "pages"}</span>
-            </>
+          {/* View mode changes nothing, so it hides the save status unless something needs attention. */}
+          {doc && (!sheet || mode === "edit" || status !== "saved") && (
+            <span role="status" className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium ${s.pill}`}>
+              <span aria-hidden className={`size-[7px] rounded-full ${s.dot}`} />{s.label}
+            </span>
           )}
+          {doc && !sheet && <span className="px-1.5 text-xs text-zinc-600">{pages} {pages === 1 ? "page" : "pages"}</span>}
+          {sheet && <ModeSwitch mode={mode} onMode={setMode} />}
+          {!sheet && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" aria-label={`Paper size: ${PAPER_LABEL[paper]}`}>
@@ -270,6 +296,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
               <p className="px-2 py-1.5 text-xs leading-normal text-zinc-600">Applies to every script in this project. Page breaks and page count change.</p>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
         </div>
       </header>
 
@@ -278,13 +305,14 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
           <div className="flex min-w-[320px] flex-1 items-start gap-2.5">
             <AlertTriangle aria-hidden className="mt-px size-[18px] flex-none text-amber-700" />
             <div className="flex flex-col gap-0.5 text-[13px]">
-              <span className="font-semibold text-amber-950">{title(doc.handle)} changed on disk</span>
-              <span className="text-amber-800">Another device or app saved this script while you had unsaved edits. Autosave is paused until you choose.</span>
+              <span className="font-semibold text-amber-950">{doc.name} changed on disk</span>
+              <span className="text-amber-800">Another device or app saved this {sheet ? "character sheet" : "script"} while you had unsaved edits. Autosave is paused until you choose.</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={loadDisk}>Load disk version</Button>
-            <Button size="sm" variant="outline" onClick={keepCopy}>Save mine as a copy</Button>
+            {/* A copy of a sheet would repeat its name, and names are unique (docs/0003-project-format.md decision 3). */}
+            {!sheet && <Button size="sm" variant="outline" onClick={keepCopy}>Save mine as a copy</Button>}
             <Button size="sm" onClick={keepMine}>Keep mine</Button>
           </div>
         </div>
@@ -303,7 +331,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
                   type="button"
                   onClick={() => open(f)}
                   aria-current={active ? "page" : undefined}
-                  className={`flex h-[34px] cursor-pointer items-center gap-2 rounded-[7px] px-2 text-left text-[13px] ${active ? "bg-white font-medium text-zinc-900 shadow-[0_0_0_1px_#E4E4E2,0_1px_2px_rgba(16,16,20,0.04)]" : "text-zinc-700 hover:bg-white"}`}
+                  className={`h-[34px] ${navItem(active)}`}
                 >
                   <FileText aria-hidden className={`size-[15px] flex-none ${active ? "text-zinc-700" : "text-zinc-500"}`} />
                   <span className="truncate">{title(f)}</span>
@@ -312,9 +340,24 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
               );
             })}
           </nav>
+          {characters.length > 0 && (
+            <nav aria-label="Characters" className="flex flex-col gap-0.5">
+              <span className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Characters</span>
+              {characters.map((c) => {
+                const active = doc?.handle.name === c.handle.name;
+                return (
+                  <button key={c.handle.name} type="button" onClick={() => open(c.handle)} aria-current={active ? "page" : undefined} className={`h-8 ${SCRIPT_FONT} ${navItem(active)}`}>
+                    <span className="truncate">{c.name}</span>
+                    {unsavedName === c.handle.name && <span aria-label="Not saved" className="ml-auto size-[7px] flex-none rounded-full bg-red-600" />}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
         </aside>
         <main className="min-w-0 flex-1 overflow-auto">
-          {doc && <Editor key={doc.key} initial={doc.text} paper={paper} onChange={onChange} onPages={setPages} />}
+          {doc && sheet && <CharacterSheet key={doc.key} initial={doc.text} mode={mode} onMode={setMode} onChange={onChange} />}
+          {doc && !sheet && <Editor key={doc.key} initial={doc.text} paper={paper} onChange={onChange} onPages={setPages} />}
         </main>
       </div>
     </div>

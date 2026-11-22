@@ -62,6 +62,15 @@ To be left alone.
 - On load, answers match questions by heading text. A heading that matches no known question loads as a custom field in that section. Nothing is dropped, so files edited outside the app (Obsidian, a text editor) are safe, and rewording a question later only turns old answers into custom fields.
 - Unknown front matter keys are kept as written.
 
+Files edited outside the app can hold text the app never writes itself. It is kept, so nothing is lost:
+
+- Indented or list lines in the front matter (nested YAML such as `tags:` followed by `  - lead`) stay with the key above and are written back unchanged. The app does not read their meaning.
+- Text between a `##` heading and its first `###` heading is kept with that section.
+- Everything before the first `##` heading is the description, including any `###` heading there.
+- Quoted values such as `name: "JOHN"` keep their quotes. The app does not unquote them.
+- Front matter keys with an empty value are dropped on save, like empty answers.
+- The filename slug keeps letters, combining marks and digits from any script, so non-Latin names such as Tamil work. Everything else becomes `-`. A name with no letters or digits gets `character`.
+
 ### 3. The `name` field is the identity
 
 The script links to a character by name (decision 0001-2). The `name:` field is that name. The filename is a slug of the name (`john.md`, `guard-1.md`) and carries no meaning.
