@@ -7,9 +7,9 @@ import { AlertTriangle, ChevronDown, ChevronLeft, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Editor from "../editor/editor";
-import type { Paper } from "../editor/screenplay";
+import { speakers, type Paper } from "../editor/screenplay";
 import { readPaper, writePaper } from "../home/project";
-import { parseCharacter } from "./character";
+import { cast, parseCharacter, slug, writeCharacter } from "./character";
 import { CharacterSheet, initialMode, type Mode, ModeSwitch } from "./character-sheet";
 import { deleteDraft, findDraft, putDraft } from "./drafts";
 import { ConflictError, readFile, saveCopy, saveFile } from "./save";
@@ -58,9 +58,22 @@ async function listCharacters(dir: FileSystemDirectoryHandle): Promise<Character
   return files.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Names that speak in each script, keyed by script filename (decision 0004-5).
+type Used = Record<string, string[]>;
+async function readSpeakers(files: FileSystemFileHandle[]): Promise<Used> {
+  const texts = await Promise.all(files.map(async (f) => (await readFile(f)).text));
+  return Object.fromEntries(files.map((f, i) => [f.name, speakers(texts[i])]));
+}
+// Keeps the same object when nothing changed, so typing does not re-render the sidebar.
+const withSpeakers = (u: Used, file: string, text: string): Used => {
+  const names = speakers(text);
+  return u[file]?.join("\n") === names.join("\n") ? u : { ...u, [file]: names };
+};
+
 export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle; onClose: () => void }) {
   const [scripts, setScripts] = useState<FileSystemFileHandle[]>([]);
   const [characters, setCharacters] = useState<CharacterFile[]>([]);
+  const [used, setUsed] = useState<Used>({});
   const [doc, setDoc] = useState<Doc | null>(null);
   const [mode, setMode] = useState<Mode>("view");
   const [status, setStatus] = useState<Status>("saved");
@@ -102,6 +115,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
     }
     const sheet = isSheet(handle);
     if (sheet) setMode(initialMode(text.current));
+    else setUsed((u) => withSpeakers(u, handle.name, text.current));
     setDoc({ handle, name: sheet ? characterName(handle, text.current) : title(handle), text: text.current, key: Date.now() });
     setStatus(next);
     setError(null);
@@ -138,6 +152,8 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
     text.current = t;
     dirty.current = true;
     putDraft(handle, t, base.current).catch(fail);
+    // ponytail: re-parses the script on every keystroke, like the editor layout (1-2 ms for 80 pages).
+    if (!isSheet(handle)) setUsed((u) => withSpeakers(u, handle.name, t));
     if (blocked.current) return;
     setStatus("unsaved");
     window.clearTimeout(timer.current);
@@ -157,11 +173,12 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
 
   useEffect(() => {
     Promise.all([readPaper(dir), listScripts(dir), listCharacters(dir)])
-      .then(async ([p, { folder: f, files }, cast]) => {
+      .then(async ([p, { folder: f, files }, sheets]) => {
         setPaper(p);
         folder.current = f;
         setScripts(files);
-        setCharacters(cast);
+        setCharacters(sheets);
+        setUsed(await readSpeakers(files));
         const first = await mostRecent(files);
         if (first && (await show(first))) timer.current = window.setTimeout(save, SAVE_DELAY_MS);
       })
@@ -237,13 +254,40 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
     try {
       await saveCopy(folder.current!, handle.name, text.current);
       await deleteDraft(handle);
-      setScripts((await listScripts(dir)).files);
+      const { files } = await listScripts(dir);
+      setScripts(files);
+      setUsed(await readSpeakers(files));
       await show(handle);
     } catch (e) {
       fail(e);
     }
   };
 
+  // Decision 0004-5: writes only `name:`; never overwrites a file with the same slug.
+  const createSheet = async (name: string) => {
+    try {
+      const folder = await dir.getDirectoryHandle("characters", { create: true });
+      const file = `${slug(name)}.md`;
+      const taken = await folder.getFileHandle(file).then(
+        () => true,
+        (e: DOMException) => {
+          if (e.name === "NotFoundError") return false;
+          throw e;
+        },
+      );
+      if (taken) throw new Error(`Cannot create a sheet for ${name}: another character sheet already uses that file name.`);
+      const handle = await folder.getFileHandle(file, { create: true });
+      await saveFile(handle, writeCharacter({ front: { name }, description: "", sections: [] }), null);
+      setCharacters(await listCharacters(dir));
+      await open(handle);
+    } catch (e) {
+      // Not a save failure of the open document, so only show the message.
+      setError((e as Error).message);
+    }
+  };
+
+  const list = cast(characters, Object.values(used).flat());
+  const names = list.map((c) => ({ name: c.name, sheet: !!c.file }));
   const s = STATUS[status];
   const unsavedName = status === "conflict" || status === "error" ? doc?.handle.name : undefined;
   const sheet = doc ? isSheet(doc.handle) : false;
@@ -340,15 +384,29 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
               );
             })}
           </nav>
-          {characters.length > 0 && (
+          {list.length > 0 && (
             <nav aria-label="Characters" className="flex flex-col gap-0.5">
               <span className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Characters</span>
-              {characters.map((c) => {
-                const active = doc?.handle.name === c.handle.name;
+              {list.map(({ name, file }) => {
+                if (!file)
+                  return (
+                    <div key={name} className="flex h-8 items-center justify-between gap-1.5 pl-2 pr-1">
+                      <span className={`${SCRIPT_FONT} truncate text-[13px] text-zinc-600`}>{name}</span>
+                      <button
+                        type="button"
+                        onClick={() => createSheet(name)}
+                        aria-label={`Create sheet for ${name}`}
+                        className="h-6 flex-none cursor-pointer rounded-md border border-dashed border-[#D4D4D1] px-2 text-[11px] font-medium text-zinc-600 hover:bg-white"
+                      >
+                        Create sheet
+                      </button>
+                    </div>
+                  );
+                const active = doc?.handle.name === file.handle.name;
                 return (
-                  <button key={c.handle.name} type="button" onClick={() => open(c.handle)} aria-current={active ? "page" : undefined} className={`h-8 ${SCRIPT_FONT} ${navItem(active)}`}>
-                    <span className="truncate">{c.name}</span>
-                    {unsavedName === c.handle.name && <span aria-label="Not saved" className="ml-auto size-[7px] flex-none rounded-full bg-red-600" />}
+                  <button key={file.handle.name} type="button" onClick={() => open(file.handle)} aria-current={active ? "page" : undefined} className={`h-8 ${SCRIPT_FONT} ${navItem(active)}`}>
+                    <span className="truncate">{name}</span>
+                    {unsavedName === file.handle.name && <span aria-label="Not saved" className="ml-auto size-[7px] flex-none rounded-full bg-red-600" />}
                   </button>
                 );
               })}
@@ -357,7 +415,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
         </aside>
         <main className="min-w-0 flex-1 overflow-auto">
           {doc && sheet && <CharacterSheet key={doc.key} initial={doc.text} mode={mode} onMode={setMode} onChange={onChange} />}
-          {doc && !sheet && <Editor key={doc.key} initial={doc.text} paper={paper} onChange={onChange} onPages={setPages} />}
+          {doc && !sheet && <Editor key={doc.key} initial={doc.text} paper={paper} names={names} onChange={onChange} onPages={setPages} />}
         </main>
       </div>
     </div>
