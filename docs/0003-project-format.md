@@ -27,6 +27,8 @@ Heist/
 - Later features add their own folders next to these (for example `locations/`, `notes/`).
 - Why a folder and not one file: the app will grow, and separate files sync better. Dropbox, iCloud and Drive sync whole files, so edits on two devices to different characters never collide.
 - Opening a project opens the most recently edited script. The other scripts are listed in a sidebar, sorted by filename.
+- New project: the writer enters a name and picks a parent folder. The app creates `<name>/` inside it with `project.json`, `scripts/<name>.fountain` (empty) and `characters/`. If `<name>/` already exists, the app refuses and asks for another name. The project name is the folder name; it is not stored in `project.json`.
+- Open project: the writer picks a folder. A folder without `project.json` is refused with "Not a project folder". A `version` newer than the app knows is refused with "Made by a newer version of the app".
 
 ### 2. One Markdown file per character
 
