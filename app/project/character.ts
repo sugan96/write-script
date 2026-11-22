@@ -75,6 +75,17 @@ export function writeCharacter(c: Character): string {
   return out.join("\n").replace(/^\n+/, "") + "\n";
 }
 
+/**
+ * The character list (decision 0004-5): every character file, plus every name used in a script
+ * that has no file. Names match without regard to case. Sorted by name.
+ */
+export function cast<F extends { name: string }>(files: F[], used: string[]): { name: string; file?: F }[] {
+  const byKey = new Map<string, { name: string; file?: F }>();
+  for (const file of files) byKey.set(file.name.toUpperCase(), { name: file.name, file });
+  for (const name of used) if (!byKey.has(name.toUpperCase())) byKey.set(name.toUpperCase(), { name });
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Filename for a character, without the extension: "Guard 1" -> "guard-1". */
 export function slug(name: string): string {
   return name.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "character";
