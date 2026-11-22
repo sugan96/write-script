@@ -78,6 +78,28 @@ export function classify(doc: string): Line[] {
   return out;
 }
 
+// Character name from a cue line: "@McCLANE (V.O.) ^" -> "McCLANE" (decision 0004-4).
+export const cueName = (text: string) =>
+  text.trim().replace(/^@/, "").replace(/\s*\^$/, "").replace(/\s*\([^)]*\)$/, "").trim();
+
+// Every name that speaks in a script, in first-use order, without duplicates.
+export function speakers(doc: string): string[] {
+  const names = classify(doc).filter((l) => l.kind === "character").map((l) => cueName(l.text));
+  return [...new Set(names.filter(Boolean))];
+}
+
+// While typing a cue the line is not yet a "character" line (no dialogue below it),
+// so suggest on any line after a blank that is in capitals or starts with "@".
+// `before` is the line up to the cursor. Returns where the name starts and the name typed so far.
+export function cuePrefix(before: string, prevLine: string): { start: number; typed: string } | null {
+  if (prevLine.trim() !== "") return null;
+  const m = /^(\s*@?)([^(]*)$/.exec(before);
+  if (!m) return null;
+  const [, lead, typed] = m;
+  if (!lead.includes("@") && !isUpper(typed)) return null;
+  return { start: lead.length, typed };
+}
+
 // Greedy word wrap at a fixed width. Matches how the browser wraps monospace
 // text with `white-space: break-spaces` (what CodeMirror uses): a trailing
 // space takes up width. Returns the start offset of each visual line.

@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 import { EditorState, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { CHAR_PT, LINE_PT, PAPERS, classify, paginate, type Break, type Geometry, type Paper } from "./screenplay";
+import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
+import { CHAR_PT, LINE_PT, PAPERS, classify, cuePrefix, paginate, type Break, type Geometry, type Paper } from "./screenplay";
 
 // All values are computed here; CSS only gets the final numbers (no calc()).
 const pt = (n: number) => `${+n.toFixed(2)}pt`;
@@ -118,16 +119,32 @@ function theme(g: Geometry) {
     },
     ".fx-dialogue .pb-top": { marginRight: `-${DIALOGUE_RIGHT}ch` },
     ".fx-dialogue .pb-contd": { paddingLeft: `${22 - DIALOGUE_LEFT}ch` },
+    // Name suggestions, styled like the app's menus (docs/design/project/).
+    ".cm-tooltip.cm-tooltip-autocomplete": { background: "#fff", border: "1px solid #E4E4E2", borderRadius: "8px", padding: "4px", boxShadow: "0 8px 24px rgba(16,16,20,0.08)" },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul": { fontFamily: "var(--font-script), Courier, monospace", fontSize: "13px", minWidth: "160px" },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul > li": { padding: "4px 8px", borderRadius: "5px", color: "#27272A" },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": { background: "#F4F4F2", color: "#18181B" },
+    ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "700" },
   });
 }
 
-type Props = { initial: string; paper?: Paper; onChange?: (text: string) => void; onPages?: (pages: number) => void };
+/** A name to suggest on cue lines; names with a sheet rank first (decision 0004-4). */
+export type Suggestion = { name: string; sheet: boolean };
 
-export default function Editor({ initial, paper = "a4", onChange, onPages }: Props) {
+type Props = {
+  initial: string;
+  paper?: Paper;
+  names?: Suggestion[];
+  onChange?: (text: string) => void;
+  onPages?: (pages: number) => void;
+};
+
+export default function Editor({ initial, paper = "a4", names = [], onChange, onPages }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const callbacks = useRef({ onChange, onPages });
+  // Read through a ref so new names do not rebuild the editor.
+  const callbacks = useRef({ onChange, onPages, names });
   useEffect(() => {
-    callbacks.current = { onChange, onPages };
+    callbacks.current = { onChange, onPages, names };
   });
 
   useEffect(() => {
@@ -136,6 +153,14 @@ export default function Editor({ initial, paper = "a4", onChange, onPages }: Pro
     const report = (s: EditorState, edited = false) => {
       callbacks.current.onPages?.(s.field(field).pages);
       if (edited) callbacks.current.onChange?.(s.doc.toString());
+    };
+    const suggest = (ctx: CompletionContext) => {
+      const line = ctx.state.doc.lineAt(ctx.pos);
+      const prev = line.number > 1 ? ctx.state.doc.line(line.number - 1).text : "";
+      const cue = cuePrefix(line.text.slice(0, ctx.pos - line.from), prev);
+      if (!cue || (!cue.typed.trim() && !ctx.explicit)) return null;
+      const options = callbacks.current.names.map((n) => ({ label: n.name, boost: n.sheet ? 1 : 0 }));
+      return { from: line.from + cue.start, options, validFor: /^[^(]*$/ };
     };
     const view = new EditorView({
       parent: host.current!,
@@ -146,6 +171,7 @@ export default function Editor({ initial, paper = "a4", onChange, onPages }: Pro
           keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.lineWrapping,
           field,
+          autocompletion({ override: [suggest], icons: false }),
           theme(g),
           EditorView.updateListener.of((u) => u.docChanged && report(u.state, true)),
         ],

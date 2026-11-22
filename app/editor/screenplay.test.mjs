@@ -1,7 +1,7 @@
 // Run: node --test app/editor/screenplay.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, PAPERS, WIDTH, classify, paginate, wrap } from "./screenplay.ts";
+import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, PAPERS, WIDTH, classify, cueName, cuePrefix, paginate, speakers, wrap } from "./screenplay.ts";
 
 test("A4 keeps the 60-character line and fills the page exactly", () => {
   const g = PAPERS.a4;
@@ -60,4 +60,26 @@ test("page geometry adds up to US Letter (11in = 792pt)", () => {
   assert.equal(PAGE.top + LINES_PER_PAGE * LINE_PT + PAGE.bottom, 792);
   assert.equal(PAGE.bottom, 60);
   assert.equal(PAGE.left + WIDTH.action * CHAR_PT + PAGE.right, 612); // 8.5in
+});
+
+test("cueName strips @, extensions and the dual-dialogue mark", () => {
+  assert.equal(cueName("JOHN (V.O.)"), "JOHN");
+  assert.equal(cueName("  JOHN (CONT'D)"), "JOHN");
+  assert.equal(cueName("JOHN (ON PHONE)"), "JOHN");
+  assert.equal(cueName("@McCLANE (O.S.) ^"), "McCLANE");
+  assert.equal(cueName("GUARD 1"), "GUARD 1");
+});
+
+test("speakers lists each name once, in first-use order", () => {
+  const doc = "INT. VAN - DAY\n\nJOHN\nLate.\n\nMARA (V.O.)\nNo.\n\nJOHN (CONT'D)\nVery.\n\nA GUARD waits.\n";
+  assert.deepEqual(speakers(doc), ["JOHN", "MARA"]);
+});
+
+test("cuePrefix finds a cue being typed after a blank line", () => {
+  assert.deepEqual(cuePrefix("JO", ""), { start: 0, typed: "JO" });
+  assert.deepEqual(cuePrefix("@Mc", ""), { start: 1, typed: "Mc" });
+  assert.equal(cuePrefix("JO", "She waits."), null); // not after a blank
+  assert.equal(cuePrefix("She", ""), null); // action, not capitals
+  assert.equal(cuePrefix("JOHN (V", ""), null); // typing an extension
+  assert.equal(cuePrefix("", ""), null); // nothing typed
 });

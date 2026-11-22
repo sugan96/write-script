@@ -1,7 +1,7 @@
 // Run: node --test app/project/character.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCharacter, slug, writeCharacter } from "./character.ts";
+import { cast, parseCharacter, slug, writeCharacter } from "./character.ts";
 
 // The example from docs/0003-project-format.md decision 2.
 const JOHN = `---
@@ -105,4 +105,10 @@ test("slug", () => {
   assert.equal(slug("  Mrs. O'Neil "), "mrs-o-neil");
   assert.equal(slug("அருண் குமார்"), "அருண்-குமார்");
   assert.equal(slug("???"), "character");
+});
+
+test("cast merges files and script names without regard to case", () => {
+  const files = [{ name: "Mara", id: 1 }, { name: "JOHN", id: 2 }];
+  const list = cast(files, ["JOHN", "GUARD", "MARA", "GUARD"]);
+  assert.deepEqual(list.map((c) => [c.name, c.file?.id]), [["GUARD", undefined], ["JOHN", 2], ["Mara", 1]]);
 });
