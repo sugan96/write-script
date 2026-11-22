@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { EditorState, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { LINES_PER_PAGE, classify, paginate, type Break } from "./screenplay";
+import { CHAR_PT, LINE_PT, PAGE, classify, paginate, type Break } from "./screenplay";
 
-// Print geometry: 12pt Courier at 6 lines per inch on US Letter (11in tall).
-// The bottom margin is whatever is left after the top margin and the text lines.
-const LINE = "12pt";
-const BOTTOM = `calc(11in - 1in - ${LINES_PER_PAGE} * ${LINE})`;
+// All values are computed here; CSS only gets the final numbers (no calc()).
+const pt = (n: number) => `${+n.toFixed(2)}pt`;
+const LINE = pt(LINE_PT);
+const DIALOGUE_LEFT = 10; // chars
+const DIALOGUE_RIGHT = 15; // chars
 
 // Bottom of one page, gap, top of the next. Drawn between lines, or inside a
 // line (replacing the space at a sentence end) when dialogue or action splits.
@@ -30,7 +31,7 @@ class PageBreak extends WidgetType {
       return d;
     };
     if (this.b.more) add("pb-more", "(MORE)");
-    add("pb-fill").style.height = `calc(${this.b.filler} * ${LINE} + ${BOTTOM})`;
+    add("pb-fill").style.height = pt(this.b.filler * LINE_PT + PAGE.bottom);
     add("pb-gap");
     add("pb-top", `${this.b.page}.`);
     if (this.b.more) add("pb-contd", `${this.b.more} (CONT'D)`);
@@ -70,23 +71,29 @@ const theme = EditorView.theme({
   "&": { background: "#fff", color: "#111", boxShadow: "0 1px 4px rgba(0,0,0,.2)" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-script), Courier, monospace", fontSize: "12pt" },
-  ".cm-content": { width: "60ch", padding: `1in 1in ${BOTTOM} 1.5in`, boxSizing: "content-box" },
+  ".cm-content": {
+    width: "60ch",
+    padding: `${pt(PAGE.top)} ${pt(PAGE.right)} ${pt(PAGE.bottom)} ${pt(PAGE.left)}`,
+    boxSizing: "content-box",
+  },
   ".cm-line": { padding: "0", lineHeight: LINE },
   ".fx-character": { paddingLeft: "22ch" },
   ".fx-parenthetical": { paddingLeft: "16ch", paddingRight: "19ch" },
-  ".fx-dialogue": { paddingLeft: "10ch", paddingRight: "15ch" },
+  ".fx-dialogue": { paddingLeft: `${DIALOGUE_LEFT}ch`, paddingRight: `${DIALOGUE_RIGHT}ch` },
   ".fx-transition": { textAlign: "right" },
   ".fx-hidden": { height: "0", overflow: "hidden" },
   // CodeMirror's invisible buffers around inline widgets add 2px per side at baseline
   ".cm-line .cm-widgetBuffer": { verticalAlign: "top" },
   ".pb": { display: "block", lineHeight: LINE },
-  ".pb-gap": { height: "24px", background: "#d4d4d4", margin: "0 -1in 0 -1.5in" },
-  ".pb-top": { height: "1in", textAlign: "right", paddingTop: "0.5in", boxSizing: "border-box" },
+  ".pb-gap": { height: "24px", background: "#d4d4d4", margin: `0 ${pt(-PAGE.right)} 0 ${pt(-PAGE.left)}` },
+  ".pb-top": { height: pt(PAGE.top), textAlign: "right", paddingTop: pt(PAGE.top / 2), boxSizing: "border-box" },
   ".pb-contd": { paddingLeft: "22ch" },
   // inside a dialogue line, the widget starts at the dialogue column
-  ".fx-dialogue .pb-gap": { margin: "0 calc(-1in - 15ch) 0 calc(-1.5in - 10ch)" },
-  ".fx-dialogue .pb-top": { marginRight: "-15ch" },
-  ".fx-dialogue .pb-contd": { paddingLeft: "12ch" },
+  ".fx-dialogue .pb-gap": {
+    margin: `0 ${pt(-(PAGE.right + DIALOGUE_RIGHT * CHAR_PT))} 0 ${pt(-(PAGE.left + DIALOGUE_LEFT * CHAR_PT))}`,
+  },
+  ".fx-dialogue .pb-top": { marginRight: `-${DIALOGUE_RIGHT}ch` },
+  ".fx-dialogue .pb-contd": { paddingLeft: `${22 - DIALOGUE_LEFT}ch` },
 });
 
 export default function Editor({ initial }: { initial: string }) {

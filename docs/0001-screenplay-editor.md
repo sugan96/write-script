@@ -64,10 +64,12 @@ A prototype confirmed live page breaks work in CodeMirror 6, including a dialogu
 
 ### 6. Print geometry and units
 
-The script page uses physical units so it prints at true size: `in` for margins, `pt` for the font and line height, `ch` for text widths. `rem` is not used for the page, because it follows the user's browser font-size setting. App UI outside the page (sidebar, character sheet) can use `rem`.
+The script page uses physical units so it prints at true size: `pt` for margins, the font and line height, `ch` for text widths and indents. `rem` is not used for the page, because it follows the user's browser font-size setting. App UI outside the page (sidebar, character sheet) can use `rem`.
+
+All page geometry is computed in TypeScript (`PAGE` in `app/editor/screenplay.ts`, in points) and CSS only receives final values. CSS `calc()` is not used. Text widths stay in `ch` so the browser wraps on the real glyph width of the loaded font.
 
 - US Letter, 12pt Courier at 10 characters and 6 lines per inch. Line height 12pt.
-- Margins: 1.5in left, 1in right, 1in top. The bottom margin is what remains after 55 lines, so a page is exactly 11in.
+- Margins: 1.5in left, 1in right, 1in top. The bottom margin is what remains after 55 lines (792 - 72 - 55 x 12 = 60pt), so a page is exactly 11in.
 - Text widths: action and scene headings 60 characters, character names start at 22ch, dialogue 35 characters from 10ch, parentheticals 25 characters from 16ch.
 
 ### 7. Font: Courier Prime, bundled
