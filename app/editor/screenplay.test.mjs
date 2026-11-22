@@ -1,7 +1,7 @@
 // Run: node --test app/editor/screenplay.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classify, paginate, wrap } from "./screenplay.ts";
+import { CHAR_PT, LINES_PER_PAGE, LINE_PT, PAGE, WIDTH, classify, paginate, wrap } from "./screenplay.ts";
 
 test("classify", () => {
   const kinds = classify("INT. KITCHEN - NIGHT\n\nJohn eats.\n\nJOHN\n(quiet)\nHello.\n\nCUT TO:\n").map((l) => l.kind);
@@ -40,4 +40,10 @@ test("blank lines past a full page are hidden, not counted", () => {
   const { breaks, hidden } = paginate(lines);
   assert.deepEqual(hidden, [lines[55].from]);
   assert.equal(breaks[0].filler, 0);
+});
+
+test("page geometry adds up to US Letter (11in = 792pt)", () => {
+  assert.equal(PAGE.top + LINES_PER_PAGE * LINE_PT + PAGE.bottom, 792);
+  assert.equal(PAGE.bottom, 60);
+  assert.equal(PAGE.left + WIDTH.action * CHAR_PT + PAGE.right, 612); // 8.5in
 });

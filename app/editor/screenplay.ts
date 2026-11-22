@@ -26,6 +26,20 @@ export const WIDTH: Record<Kind, number> = {
 
 export const LINES_PER_PAGE = 55;
 
+// Print geometry in points (72pt = 1in): 12pt Courier at 10 chars and 6 lines
+// per inch on US Letter. CSS receives these as final values; no calc().
+const INCH = 72;
+export const LINE_PT = 12;
+export const CHAR_PT = 7.2;
+export const PAGE = {
+  height: 11 * INCH,
+  top: 1 * INCH,
+  left: 1.5 * INCH,
+  right: 1 * INCH,
+  // whatever is left after the top margin and the text lines: 60pt
+  bottom: 11 * INCH - 1 * INCH - LINES_PER_PAGE * LINE_PT,
+};
+
 const SCENE = /^(INT|EXT|EST|INT\.?\/EXT|I\/E)[. ]/i;
 const isUpper = (s: string) => /[A-Z]/.test(s) && s === s.toUpperCase();
 
