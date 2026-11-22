@@ -33,7 +33,7 @@ The saved script is a [Fountain](https://fountain.io) text file. The editor only
 In the script, a character is its name as text (`JOHN`). The character sheet links to the script by name.
 
 - Why: this matches how screenplays work and how Final Draft, Fade In and Highland build their character lists. Storing IDs in the script would create two sources of truth and need rules for names typed outside the sheet, deleted sheet entries, and pasted text.
-- Rename: a bulk replace in the script (character lines and caps mentions in action), shown to the writer as "N changes" and applied as one undoable transaction.
+- Rename: a bulk replace across every script in the project (character lines and caps mentions in action), plus a rename of the character file (decision 0003-3). Shown to the writer as "N changes in M scripts" and applied as one undoable step.
 - Limit: two different characters cannot share a name. Writers use `GUARD #1` / `GUARD #2`.
 
 ### 3. Element entry: Fountain rules plus shortcuts
