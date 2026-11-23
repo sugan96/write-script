@@ -75,6 +75,12 @@ export function writeCharacter(c: Character): string {
   return out.join("\n").replace(/^\n+/, "") + "\n";
 }
 
+/** The same character file with a new `name:`; everything else is kept (decision 0004-6). */
+export function withName(raw: string, name: string): string {
+  const c = parseCharacter(raw);
+  return writeCharacter({ ...c, front: { ...c.front, name } });
+}
+
 /**
  * The character list (decision 0004-5): every character file, plus every name used in a script
  * that has no file. Names match without regard to case. Sorted by name.
