@@ -3,9 +3,10 @@
 // Project screen: script list, editor, autosave with conflict check (docs/0002-storage-byos.md decision 3,
 // docs/0003-project-format.md decision 1). Design: docs/design/project/.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, FileText, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, FileText, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Editor from "../editor/editor";
 import { renameCharacter, speakers, type Paper } from "../editor/screenplay";
 import { readPaper, writePaper } from "../home/project";
@@ -13,6 +14,7 @@ import { cast, parseCharacter, slug, withName, writeCharacter } from "./characte
 import { CharacterSheet, initialMode, type Mode, ModeSwitch, type Rename } from "./character-sheet";
 import { deleteDraft, findDraft, putDraft } from "./drafts";
 import { ConflictError, readFile, saveCopy, saveFile } from "./save";
+import { byName, scriptNameError } from "./scripts";
 
 type Status = "saved" | "unsaved" | "saving" | "conflict" | "error";
 type Doc = { handle: FileSystemFileHandle; name: string; text: string; key: number };
@@ -33,8 +35,50 @@ async function listScripts(dir: FileSystemDirectoryHandle): Promise<{ folder: Fi
   const folder = await dir.getDirectoryHandle("scripts", { create: true });
   const files: FileSystemFileHandle[] = [];
   for await (const h of folder.values()) if (h.kind === "file" && h.name.endsWith(".fountain")) files.push(h as FileSystemFileHandle);
-  files.sort((a, b) => a.name.localeCompare(b.name));
+  files.sort((a, b) => byName(title(a), title(b)));
   return { folder, files };
+}
+
+// Writes `text` under `to` and removes `from` (docs/0006-script-management.md decision 3).
+// A change of case only is the same file on macOS and Windows, so it goes through a temporary name.
+async function moveFile(folder: FileSystemDirectoryHandle, from: string, to: string, text: string): Promise<FileSystemFileHandle> {
+  if (from.toLowerCase() === to.toLowerCase()) {
+    const tmp = `${to}.renaming`;
+    await saveFile(await folder.getFileHandle(tmp, { create: true }), text, null);
+    await folder.removeEntry(from);
+    from = tmp;
+  }
+  const handle = await folder.getFileHandle(to, { create: true });
+  await saveFile(handle, text, null);
+  await folder.removeEntry(from);
+  return handle;
+}
+
+// Name field for a new script or a rename (docs/0006-script-management.md decisions 2 and 3).
+function NameField({ initial, label, hint, error, onSubmit, onCancel }: { initial: string; label: string; hint: string; error: string | null; onSubmit: (name: string) => void; onCancel: () => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 pb-1.5">
+      <div className={`flex h-[34px] items-center gap-2 rounded-[7px] border bg-white px-2 ${error ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-zinc-400 shadow-[0_0_0_3px_rgba(24,24,27,0.08)]"}`}>
+        <FileText aria-hidden className="size-[15px] flex-none text-zinc-500" />
+        <input
+          autoFocus
+          aria-label={label}
+          defaultValue={initial}
+          aria-invalid={!!error}
+          aria-describedby={error ? "script-name-error" : undefined}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSubmit(e.currentTarget.value);
+            else if (e.key === "Escape") onCancel();
+          }}
+          onBlur={(e) => onSubmit(e.currentTarget.value)}
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-zinc-900 outline-none"
+        />
+      </div>
+      {error && <p id="script-name-error" className="px-2 text-xs text-red-700">{error}</p>}
+      <p className="px-2 text-[11px] text-zinc-500">{hint}</p>
+    </div>
+  );
 }
 
 async function mostRecent(files: FileSystemFileHandle[]): Promise<FileSystemFileHandle | undefined> {
@@ -101,6 +145,11 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
   const [error, setError] = useState<string | null>(null);
   const [paper, setPaper] = useState<Paper>("a4");
   const [pages, setPages] = useState(0);
+  const [ready, setReady] = useState(false); // script list loaded
+  // The open name field: file is null for a new script, else the script being renamed.
+  const [naming, setNaming] = useState<{ file: FileSystemFileHandle | null; error: string | null } | null>(null);
+  const [deleting, setDeleting] = useState<FileSystemFileHandle | null>(null);
+  const busy = useRef(false); // a create or rename is running
 
   const folder = useRef<FileSystemDirectoryHandle | null>(null);
   const current = useRef<FileSystemFileHandle | null>(null);
@@ -199,6 +248,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
         folder.current = f;
         setScripts(files);
         setCharacters(sheets);
+        setReady(true);
         setUsed(await readSpeakers(files));
         const first = await mostRecent(files);
         if (first && (await show(first))) timer.current = window.setTimeout(save, SAVE_DELAY_MS);
@@ -385,6 +435,72 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
       setError(`Undo stopped: ${(e as Error).message}`);
     }
   };
+  const reloadScripts = async () => {
+    const { files } = await listScripts(dir);
+    setScripts(files);
+    setUsed(await readSpeakers(files));
+    return files;
+  };
+
+  // New script or rename from the name field (docs/0006-script-management.md decisions 2 and 3).
+  const submitName = async (raw: string) => {
+    if (!naming || busy.current) return;
+    const from = naming.file;
+    const name = raw.trim();
+    if (!name || (from && name === title(from))) return setNaming(null);
+    busy.current = true;
+    try {
+      const { folder: scriptsDir, files } = await listScripts(dir);
+      const bad = scriptNameError(name, files.filter((h) => h.name !== from?.name).map(title));
+      if (bad) return setNaming({ file: from, error: bad });
+      const file = `${name}.fountain`;
+      if (!from) {
+        const handle = await scriptsDir.getFileHandle(file, { create: true });
+        setNaming(null);
+        await reloadScripts();
+        await open(handle);
+        return;
+      }
+      const wasOpen = current.current?.name === from.name;
+      if (wasOpen) await save();
+      // A draft means edits not on disk yet (a conflict, or left from an earlier session).
+      if (await findDraft(from)) return setNaming({ file: from, error: `${title(from)} has unsaved edits. Open it and save them before renaming.` });
+      setUndo(null); // a character rename undo holds the old script handles
+      const moved = await moveFile(scriptsDir, from.name, file, (await readFile(from)).text);
+      setNaming(null);
+      await reloadScripts();
+      if (wasOpen) await show(moved);
+    } catch (e) {
+      setNaming(null);
+      setError((e as Error).message);
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  // Delete after the confirm dialog (docs/0006-script-management.md decision 4).
+  const deleteScript = async () => {
+    const handle = deleting!;
+    setDeleting(null);
+    setUndo(null);
+    const wasOpen = current.current?.name === handle.name;
+    if (wasOpen) {
+      window.clearTimeout(timer.current);
+      current.current = null;
+      dirty.current = false;
+      setDoc(null);
+      setStatus("saved");
+    }
+    try {
+      await deleteDraft(handle);
+      await folder.current!.removeEntry(handle.name);
+      const next = await mostRecent(await reloadScripts());
+      if (wasOpen && next) await open(next);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const s = STATUS[status];
   const unsavedName = status === "conflict" || status === "error" ? doc?.handle.name : undefined;
   const sheet = doc ? isSheet(doc.handle) : false;
@@ -414,7 +530,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
           )}
           {doc && !sheet && <span className="px-1.5 text-xs text-zinc-600">{pages} {pages === 1 ? "page" : "pages"}</span>}
           {sheet && <ModeSwitch mode={mode} onMode={setMode} />}
-          {!sheet && (
+          {doc && !sheet && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" aria-label={`Paper size: ${PAPER_LABEL[paper]}`}>
@@ -478,21 +594,45 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-[248px] flex-none flex-col gap-[22px] overflow-y-auto border-r border-[#E4E4E2] bg-[#FAFAF9] px-3 py-4 md:flex">
           <nav aria-label="Scripts" className="flex flex-col gap-0.5">
-            <span className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Scripts</span>
+            <div className="flex items-center justify-between px-2 pb-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Scripts</span>
+              <button type="button" aria-label="New script" onClick={() => setNaming({ file: null, error: null })} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-zinc-600 hover:bg-[#EDEDEB] hover:text-zinc-900">
+                <Plus aria-hidden className="size-3.5" />
+              </button>
+            </div>
+            {naming && !naming.file && (
+              <NameField initial="" label="New script name" hint="Enter to create · Esc to cancel" error={naming.error} onSubmit={submitName} onCancel={() => setNaming(null)} />
+            )}
             {scripts.map((f) => {
+              const name = title(f);
+              if (naming?.file?.name === f.name)
+                return <NameField key={f.name} initial={name} label={`Rename ${name}`} hint={`Enter to rename · Esc to keep ${name}`} error={naming.error} onSubmit={submitName} onCancel={() => setNaming(null)} />;
               const active = doc?.handle.name === f.name;
               return (
-                <button
-                  key={f.name}
-                  type="button"
-                  onClick={() => open(f)}
-                  aria-current={active ? "page" : undefined}
-                  className={`h-[34px] ${navItem(active)}`}
-                >
-                  <FileText aria-hidden className={`size-[15px] flex-none ${active ? "text-zinc-700" : "text-zinc-500"}`} />
-                  <span className="truncate">{title(f)}</span>
-                  {unsavedName === f.name && <span aria-label="Not saved" className="ml-auto size-[7px] flex-none rounded-full bg-red-600" />}
-                </button>
+                <div key={f.name} className={`group h-[34px] pr-1 ${navItem(active)}`}>
+                  <button type="button" onClick={() => open(f)} aria-current={active ? "page" : undefined} className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 text-left">
+                    <FileText aria-hidden className={`size-[15px] flex-none ${active ? "text-zinc-700" : "text-zinc-500"}`} />
+                    <span className="truncate">{name}</span>
+                    {unsavedName === f.name && <span aria-label="Not saved" className="ml-auto size-[7px] flex-none rounded-full bg-red-600" />}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Actions for ${name}`}
+                        className="flex size-[26px] flex-none cursor-pointer items-center justify-center rounded-md text-zinc-600 opacity-0 hover:bg-[#EDEDEB] hover:text-zinc-900 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:bg-[#EDEDEB] data-[state=open]:opacity-100"
+                      >
+                        <MoreHorizontal aria-hidden className="size-[15px]" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    {/* Focus goes to the name field or the dialog, not back to this button. */}
+                    <DropdownMenuContent align="start" className="w-44" onCloseAutoFocus={(e) => e.preventDefault()}>
+                      <DropdownMenuItem className="text-[13px]" onSelect={() => setNaming({ file: f, error: null })}><Pencil aria-hidden />Rename</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-[13px]" variant="destructive" onSelect={() => setDeleting(f)}><Trash2 aria-hidden />Delete…</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               );
             })}
           </nav>
@@ -528,8 +668,36 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
         <main className="min-w-0 flex-1 overflow-auto">
           {doc && sheet && <CharacterSheet key={doc.key} initial={doc.text} mode={mode} onMode={setMode} onChange={onChange} onRename={rename} />}
           {doc && !sheet && <Editor key={doc.key} initial={doc.text} paper={paper} names={names} onChange={onChange} onPages={setPages} />}
+          {!doc && ready && scripts.length === 0 && (
+            // Decision 0006-5.
+            <div className="flex h-full items-center justify-center p-6">
+              <div className="flex w-80 flex-col items-center gap-4 text-center">
+                <div aria-hidden className="flex size-12 items-center justify-center rounded-xl bg-white shadow-[0_0_0_1px_#E4E4E2,0_1px_2px_rgba(16,16,20,0.04)]">
+                  <FileText className="size-[22px] text-zinc-600" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <h2 className="text-base font-semibold text-zinc-900">No scripts yet</h2>
+                  <p className="text-[13px] leading-5 text-zinc-600">Start a script in this project. Your characters stay as they are.</p>
+                </div>
+                <Button onClick={() => setNaming({ file: null, error: null })}><Plus aria-hidden />New script</Button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
+
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <DialogContent showCloseButton={false} className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Delete {deleting ? title(deleting) : ""}?</DialogTitle>
+            <DialogDescription>The file is removed from your project folder. This cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={deleteScript}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
