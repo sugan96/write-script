@@ -3,14 +3,14 @@
 // Project screen: script list, editor, autosave with conflict check (docs/0002-storage-byos.md decision 3,
 // docs/0003-project-format.md decision 1). Design: docs/design/project/.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronLeft, FileText } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Editor from "../editor/editor";
-import { speakers, type Paper } from "../editor/screenplay";
+import { renameCharacter, speakers, type Paper } from "../editor/screenplay";
 import { readPaper, writePaper } from "../home/project";
-import { cast, parseCharacter, slug, writeCharacter } from "./character";
-import { CharacterSheet, initialMode, type Mode, ModeSwitch } from "./character-sheet";
+import { cast, parseCharacter, slug, withName, writeCharacter } from "./character";
+import { CharacterSheet, initialMode, type Mode, ModeSwitch, type Rename } from "./character-sheet";
 import { deleteDraft, findDraft, putDraft } from "./drafts";
 import { ConflictError, readFile, saveCopy, saveFile } from "./save";
 
@@ -58,6 +58,26 @@ async function listCharacters(dir: FileSystemDirectoryHandle): Promise<Character
   return files.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function exists(folder: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  try {
+    await folder.getFileHandle(name);
+    return true;
+  } catch (e) {
+    if ((e as DOMException).name === "NotFoundError") return false;
+    throw e;
+  }
+}
+
+// What the undo bar needs to put a rename back (decision 0004-6). Kept in memory only.
+type Undo = {
+  from: string;
+  to: string;
+  changes: number;
+  /** Text before the rename, and lastModified after our write, per changed script. */
+  scripts: { handle: FileSystemFileHandle; text: string; lastModified: number }[];
+  sheet: FileSystemFileHandle;
+};
+
 // Names that speak in each script, keyed by script filename (decision 0004-5).
 type Used = Record<string, string[]>;
 async function readSpeakers(files: FileSystemFileHandle[]): Promise<Used> {
@@ -74,6 +94,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
   const [scripts, setScripts] = useState<FileSystemFileHandle[]>([]);
   const [characters, setCharacters] = useState<CharacterFile[]>([]);
   const [used, setUsed] = useState<Used>({});
+  const [undo, setUndo] = useState<Undo | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [mode, setMode] = useState<Mode>("view");
   const [status, setStatus] = useState<Status>("saved");
@@ -205,6 +226,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
   }, [save, check, fail]);
 
   const open = async (handle: FileSystemFileHandle) => {
+    setUndo(null); // decision 0004-6: opening another document ends the undo
     await save();
     try {
       if (await show(handle)) timer.current = window.setTimeout(save, SAVE_DELAY_MS);
@@ -268,14 +290,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
     try {
       const folder = await dir.getDirectoryHandle("characters", { create: true });
       const file = `${slug(name)}.md`;
-      const taken = await folder.getFileHandle(file).then(
-        () => true,
-        (e: DOMException) => {
-          if (e.name === "NotFoundError") return false;
-          throw e;
-        },
-      );
-      if (taken) throw new Error(`Cannot create a sheet for ${name}: another character sheet already uses that file name.`);
+      if (await exists(folder, file)) throw new Error(`Cannot create a sheet for ${name}: another character sheet already uses that file name.`);
       const handle = await folder.getFileHandle(file, { create: true });
       await saveFile(handle, writeCharacter({ front: { name }, description: "", sections: [] }), null);
       setCharacters(await listCharacters(dir));
@@ -288,6 +303,88 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
 
   const list = cast(characters, Object.values(used).flat());
   const names = list.map((c) => ({ name: c.name, sheet: !!c.file }));
+
+  // Reload the lists and show the sheet in Edit, where rename and undo start.
+  const reopen = async (handle: FileSystemFileHandle) => {
+    const { files } = await listScripts(dir);
+    setScripts(files);
+    setUsed(await readSpeakers(files));
+    setCharacters(await listCharacters(dir));
+    await show(handle);
+    setMode("edit");
+  };
+
+  // Project-wide rename from the sheet (docs/0004-character-sheet.md decision 6, docs/0001-screenplay-editor.md decision 2).
+  const rename: Rename = async (to) => {
+    const handle = current.current!;
+    const from = doc!.name;
+    if (!to) return "A character needs a name.";
+    const other = list.find((c) => c.name.toUpperCase() === to && c.file?.handle.name !== handle.name);
+    if (other) return `Another character is already called ${to}. Pick a different name, or press Esc to keep ${from}.`;
+    const folder = await dir.getDirectoryHandle("characters");
+    const file = `${slug(to)}.md`;
+    if (file !== handle.name && (await exists(folder, file))) return `Another file already uses the file name for ${to}. Pick a different name, or press Esc to keep ${from}.`;
+    await save();
+    if (dirty.current) return "Save this sheet before renaming it.";
+
+    setUndo(null);
+    const done: Undo["scripts"] = [];
+    let changes = 0;
+    try {
+      for (const script of (await listScripts(dir)).files) {
+        const disk = await readFile(script);
+        const r = renameCharacter(disk.text, from, to);
+        if (!r.changes) continue;
+        done.push({ handle: script, text: disk.text, lastModified: await saveFile(script, r.text, disk.lastModified) });
+        changes += r.changes;
+      }
+      const renamed = file === handle.name ? handle : await folder.getFileHandle(file, { create: true });
+      await saveFile(renamed, withName((await readFile(handle)).text, to), renamed === handle ? base.current : null);
+      if (renamed !== handle) await folder.removeEntry(handle.name);
+      setUndo({ from, to, changes, scripts: done, sheet: renamed });
+      await reopen(renamed);
+    } catch (e) {
+      // Decision 0004-6: stop, name what changed, and let the undo bar put it back.
+      const changed = done.map((d) => title(d.handle)).join(", ") || "none";
+      setUndo({ from, to, changes, scripts: done, sheet: handle });
+      setError(`Rename stopped: ${(e as Error).message} Scripts already changed: ${changed}. Use Undo to put them back.`);
+    }
+    return null;
+  };
+
+  // Writes the old texts back with the conflict check and renames the sheet back (decision 0004-6).
+  const undoRename = async () => {
+    const u = undo!;
+    setUndo(null);
+    await save();
+    const skipped: string[] = [];
+    try {
+      for (const s of u.scripts) {
+        try {
+          await saveFile(s.handle, s.text, s.lastModified);
+        } catch (e) {
+          if (!(e instanceof ConflictError)) throw e;
+          skipped.push(title(s.handle));
+        }
+      }
+      // The sheet keeps edits made since the rename; only its name goes back.
+      const folder = await dir.getDirectoryHandle("characters");
+      const file = `${slug(u.from)}.md`;
+      const sheetText = withName((await readFile(u.sheet)).text, u.from);
+      let back = u.sheet;
+      if (file === u.sheet.name) await saveFile(u.sheet, sheetText, null);
+      else if (await exists(folder, file)) skipped.push(`the sheet (another file is called ${u.from})`);
+      else {
+        back = await folder.getFileHandle(file, { create: true });
+        await saveFile(back, sheetText, null);
+        await folder.removeEntry(u.sheet.name);
+      }
+      await reopen(back);
+      if (skipped.length) setError(`Undo skipped files that changed since the rename: ${skipped.join(", ")}.`);
+    } catch (e) {
+      setError(`Undo stopped: ${(e as Error).message}`);
+    }
+  };
   const s = STATUS[status];
   const unsavedName = status === "conflict" || status === "error" ? doc?.handle.name : undefined;
   const sheet = doc ? isSheet(doc.handle) : false;
@@ -361,6 +458,21 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
           </div>
         </div>
       )}
+      {undo && (
+        <div role="status" className="flex flex-none items-center gap-4 border-b border-[#E4E4E2] bg-white py-2.5 pl-5 pr-3">
+          <div className="flex flex-1 flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px]">
+            <Check aria-hidden className="size-[18px] flex-none text-green-600" />
+            <span className="font-semibold text-zinc-900">
+              Renamed <span className={SCRIPT_FONT}>{undo.from}</span> to <span className={SCRIPT_FONT}>{undo.to}</span>
+            </span>
+            <span className="text-zinc-600">
+              {undo.changes} {undo.changes === 1 ? "change" : "changes"} in {undo.scripts.length} {undo.scripts.length === 1 ? "script" : "scripts"}
+            </span>
+          </div>
+          <Button size="sm" variant="outline" onClick={undoRename}>Undo</Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Close" className="text-zinc-600" onClick={() => setUndo(null)}><X aria-hidden /></Button>
+        </div>
+      )}
       {error && <p role="alert" className="flex-none border-b border-red-200 bg-red-50 px-5 py-3 text-[13px] text-red-900">{error}</p>}
 
       <div className="flex min-h-0 flex-1">
@@ -414,7 +526,7 @@ export function ProjectScreen({ dir, onClose }: { dir: FileSystemDirectoryHandle
           )}
         </aside>
         <main className="min-w-0 flex-1 overflow-auto">
-          {doc && sheet && <CharacterSheet key={doc.key} initial={doc.text} mode={mode} onMode={setMode} onChange={onChange} />}
+          {doc && sheet && <CharacterSheet key={doc.key} initial={doc.text} mode={mode} onMode={setMode} onChange={onChange} onRename={rename} />}
           {doc && !sheet && <Editor key={doc.key} initial={doc.text} paper={paper} names={names} onChange={onChange} onPages={setPages} />}
         </main>
       </div>
