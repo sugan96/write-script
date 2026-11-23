@@ -88,6 +88,27 @@ export function speakers(doc: string): string[] {
   return [...new Set(names.filter(Boolean))];
 }
 
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Rename a character in one script (decision 0004-6): cue lines (keeping @, extensions and ^)
+// and the name in capitals in action lines, whole words only. Returns the new text and the number of changes.
+export function renameCharacter(doc: string, from: string, to: string): { text: string; changes: number } {
+  const key = from.trim().toUpperCase();
+  const caps = new RegExp(`(?<![\\p{L}\\p{N}])${escape(key)}(?![\\p{L}\\p{N}])`, "gu");
+  let changes = 0;
+  const lines = classify(doc).map((l) => {
+    if (l.kind === "character") {
+      const m = /^(\s*@?)(.*?)(\s*\([^)]*\))?(\s*\^)?(\s*)$/.exec(l.text)!;
+      if (m[2].trim().toUpperCase() !== key) return l.text;
+      changes++;
+      return m[1] + to + (m[3] ?? "") + (m[4] ?? "") + m[5];
+    }
+    if (l.kind !== "action") return l.text;
+    return l.text.replace(caps, () => (changes++, to));
+  });
+  return { text: lines.join("\n"), changes };
+}
+
 // While typing a cue the line is not yet a "character" line (no dialogue below it),
 // so suggest on any line after a blank that is in capitals or starts with "@".
 // `before` is the line up to the cursor. Returns where the name starts and the name typed so far.

@@ -4,7 +4,7 @@
 // Design: docs/design/project/character-edit.html and character-view.html.
 import { useEffect, useRef, useState } from "react";
 import { type Control, type UseFormRegister, useFieldArray, useForm, useWatch } from "react-hook-form";
-import { ChevronDown, Eye, GripVertical, Pencil, Plus, X } from "lucide-react";
+import { ChevronDown, CircleAlert, Eye, GripVertical, Pencil, Plus, X } from "lucide-react";
 import { answered, fromForm, HEADER, hasContent, type FormSection, type SheetValues, toForm } from "./sheet";
 
 export type Mode = "view" | "edit";
@@ -35,7 +35,10 @@ export function ModeSwitch({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => 
   );
 }
 
-export function CharacterSheet({ initial, mode, onMode, onChange }: { initial: string; mode: Mode; onMode: (m: Mode) => void; onChange: (text: string) => void }) {
+/** Returns an error to show under the field, or null when the rename ran (or failed with an error shown elsewhere). */
+export type Rename = (name: string) => Promise<string | null>;
+
+export function CharacterSheet({ initial, mode, onMode, onChange, onRename }: { initial: string; mode: Mode; onMode: (m: Mode) => void; onChange: (text: string) => void; onRename: Rename }) {
   // The screen mounts a new sheet for each file it loads, so defaults are read once.
   const [defaults] = useState(() => toForm(initial));
   const { control, register, getValues, subscribe } = useForm<SheetValues>({ defaultValues: defaults });
@@ -60,21 +63,81 @@ export function CharacterSheet({ initial, mode, onMode, onChange }: { initial: s
 
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 px-4 pb-20 pt-10">
-      {mode === "edit" ? <Edit control={control} register={register} sections={defaults.sections} /> : <View values={getValues()} onEdit={() => onMode("edit")} />}
+      {mode === "edit" ? (
+        <Edit control={control} register={register} sections={defaults.sections} name={defaults.front.name ?? ""} onRename={onRename} />
+      ) : (
+        <View values={getValues()} onEdit={() => onMode("edit")} />
+      )}
     </div>
   );
 }
 
-function Edit({ control, register, sections }: { control: Control<SheetValues>; register: UseFormRegister<SheetValues>; sections: FormSection[] }) {
+// Not a registered form field: the name changes only through a rename (decision 0004-6),
+// so autosave never writes a half-typed name. Design: docs/design/project/character-rename.html.
+function NameField({ name, onRename }: { name: string; onRename: Rename }) {
+  const [value, setValue] = useState(name);
+  const [error, setError] = useState<string | null>(null);
+  const busy = useRef(false);
+  const next = value.trim().toUpperCase();
+  const changed = next !== name.trim().toUpperCase();
+
+  const commit = async () => {
+    if (busy.current) return;
+    if (!changed) {
+      setValue(name);
+      setError(null);
+      return;
+    }
+    busy.current = true;
+    const err = await onRename(next);
+    busy.current = false;
+    setError(err);
+    // On success the screen mounts a new sheet; otherwise show the name the file still has.
+    if (!err) setValue(name);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="sheet-name" className="text-xs font-medium text-zinc-600">Name</label>
+      <input
+        id="sheet-name"
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setError(null);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setValue(name);
+            setError(null);
+          }
+        }}
+        aria-invalid={!!error}
+        aria-describedby="sheet-name-hint"
+        className={`${SCRIPT_FONT} w-full rounded-lg border bg-white px-3 py-1.5 text-[28px] font-bold leading-9 text-zinc-900 ${error ? "border-red-600 ring-3 ring-red-600/12" : "border-[#E4E4E2] focus:border-zinc-900 focus:ring-3 focus:ring-zinc-900/12"} outline-none`}
+      />
+      {error ? (
+        <span id="sheet-name-hint" role="alert" className="flex items-center gap-1.5 text-xs text-red-700">
+          <CircleAlert aria-hidden className="size-3.5 flex-none" />{error}
+        </span>
+      ) : (
+        <span id="sheet-name-hint" className={`text-xs ${changed ? "text-zinc-600" : "text-zinc-500"}`}>
+          {changed && next ? `Press Enter to rename ${name} to ${next} in every script. Esc keeps ${name}.` : "Renaming updates every script in this project."}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Edit({ control, register, sections, name, onRename }: { control: Control<SheetValues>; register: UseFormRegister<SheetValues>; sections: FormSection[]; name: string; onRename: Rename }) {
   return (
     <>
       <section aria-label="Header" className={`${CARD} mb-2 flex flex-col gap-[22px] p-6`}>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="sheet-name" className="text-xs font-medium text-zinc-600">Name</label>
-          {/* Read-only until project-wide rename is built (decision 0004-6). */}
-          <input id="sheet-name" readOnly {...register("front.name")} className={`${SCRIPT_FONT} w-full rounded-lg border border-[#E4E4E2] bg-[#FAFAF9] px-3 py-1.5 text-[28px] font-bold leading-9 text-zinc-900`} />
-          <span className="text-xs text-zinc-500">Renaming is not available yet.</span>
-        </div>
+        <NameField name={name} onRename={onRename} />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="sheet-desc" className="text-[13px] font-medium text-zinc-800">Short description</label>
           <textarea id="sheet-desc" {...register("description")} className={TEXTAREA} />
